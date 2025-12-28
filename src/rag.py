@@ -122,6 +122,60 @@ class RAGSystem:
             logger.error(f"Error generating response: {e}")
             return "Произошла ошибка при обработке запроса. Попробуйте позже."
 
+    def generate_response_stream(self, query: str, context: str, confidence: float):
+        """Generate streaming response using DeepSeek"""
+        if confidence < self.confidence_threshold:
+            yield "Извините, я не нашел достаточно надежной информации для ответа на ваш вопрос. Пожалуйста, уточните вопрос или обратитесь к специалистам ТПП УР."
+            return
+
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": f"Контекст:\n{context}\n\nВопрос: {query}"}
+        ]
+
+        try:
+            response = requests.post(
+                f"{self.deepseek_base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.deepseek_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": messages,
+                    "temperature": 0.1,
+                    "max_tokens": 1000,
+                    "stream": True
+                },
+                timeout=60,
+                stream=True
+            )
+            response.raise_for_status()
+
+            full_response = ""
+            for line in response.iter_lines():
+                if line:
+                    line = line.decode('utf-8')
+                    if line.startswith('data: '):
+                        data = line[6:]  # Remove 'data: ' prefix
+                        if data == '[DONE]':
+                            break
+
+                        try:
+                            chunk = json.loads(data)
+                            if chunk.get('choices') and len(chunk['choices']) > 0:
+                                delta = chunk['choices'][0].get('delta', {})
+                                content = delta.get('content', '')
+                                if content:
+                                    full_response += content
+                                    yield content
+                        except json.JSONDecodeError:
+                            continue
+
+        except Exception as e:
+            logger.error(f"Error in streaming response: {e}")
+            yield f"\n\nПроизошла ошибка при обработке запроса: {str(e)}"
+
     def ask(self, query: str, collection_name: Optional[str] = None) -> Dict[str, Any]:
         """Main method to ask questions"""
         logger.info(f"Processing query: {query}")
@@ -137,4 +191,35 @@ class RAGSystem:
             "response": response,
             "confidence": search_result["confidence"],
             "sources": search_result["sources"]
+        }
+
+    def ask_stream(self, query: str, collection_name: Optional[str] = None):
+        """Main method to ask questions with streaming response"""
+        logger.info(f"Processing streaming query: {query}")
+
+        # Search context
+        search_result = self.search_context(query, collection_name)
+
+        # Yield metadata first
+        yield {
+            "type": "metadata",
+            "query": query,
+            "confidence": search_result["confidence"],
+            "sources": search_result["sources"]
+        }
+
+        # Stream response
+        response_parts = []
+        for chunk in self.generate_response_stream(query, search_result["context"], search_result["confidence"]):
+            response_parts.append(chunk)
+            yield {
+                "type": "content",
+                "content": chunk
+            }
+
+        # Yield final response
+        full_response = "".join(response_parts)
+        yield {
+            "type": "end",
+            "full_response": full_response
         }

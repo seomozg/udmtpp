@@ -88,12 +88,14 @@
 | **AI Chat** | Вопросы к ассистенту + выбор коллекции |
 | **Upload** | Загрузка документов вручную |
 
-### ✅ 4) RAG-система с AI
+### ✅ 4) RAG-система с AI и стримингом
 
 - **Умный поиск** по всем коллекциям
 - **Confidence scoring** для оценки релевантности
 - **Источники ответов** с ссылками
 - **Fallback** при низкой уверенности
+- **🚀 Streaming responses** - ответ появляется по частям в реальном времени
+- **Server-Sent Events** для плавного отображения текста
 
 ### ✅ 5) Полное покрытие тестами (TDD)
 
@@ -235,26 +237,37 @@ python src/bot.py
 | `GET` | `/chat` | Чат интерфейс |
 | `GET` | `/collections` | Управление коллекциями |
 | `GET` | `/upload` | Загрузка файлов |
-| `POST` | `/api/chat` | Отправка вопросов AI |
+| `POST` | `/api/chat` | Отправка вопросов AI (обычный режим) |
+| `POST` | `/api/chat/stream` | 🚀 **Streaming чат** (ответ по частям) |
 | `GET` | `/api/collections` | Получение статистики |
 | `POST` | `/api/rebuild-from-cache` | Перестроение БД из кеша |
 | `POST` | `/api/parse-site` | Парсинг сайта |
 | `POST` | `/api/upload` | Загрузка документа |
 
-### Пример ответа системы:
+### Примеры ответов системы:
+
+**Обычный режим:**
 ```json
 {
   "query": "Расскажи про мероприятия ТПП",
   "response": "Торгово-промышленная палата Удмуртской Республики организует различные мероприятия для предпринимателей...",
   "confidence": 0.85,
-  "sources": [
-    {
-      "url": "https://udmtpp.ru/events/2023/forum/",
-      "score": 0.83,
-      "category": "events"
-    }
-  ]
+  "sources": [...]
 }
+```
+
+**🚀 Streaming режим (Server-Sent Events):**
+```
+data: {"type": "metadata", "query": "...", "confidence": 0.85, "sources": [...]}
+
+data: {"type": "content", "content": "Торгово"}
+data: {"type": "content", "content": "-промышленная"}
+data: {"type": "content", "content": " палата"}
+
+... (текст появляется по частям)
+
+data: {"type": "end", "full_response": "Полный текст ответа..."}
+data: [DONE]
 ```
 
 ---

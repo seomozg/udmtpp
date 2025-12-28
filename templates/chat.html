@@ -51,6 +51,15 @@
                             </select>
                         </div>
 
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="streamingMode" checked>
+                                <label class="form-check-label" for="streamingMode">
+                                    🚀 Режим стриминга (ответ появляется по частям)
+                                </label>
+                            </div>
+                        </div>
+
                         <div id="chatMessages" class="chat-messages mb-3" style="height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background-color: #f8f9fa;">
                             <div class="message assistant-message">
                                 <strong>🤖 Помощник:</strong> Здравствуйте! Я ИИ-помощник ТПП Удмуртской Республики. Задайте мне вопрос о наших услугах, мероприятиях или другой информации с сайта udmtpp.ru
@@ -86,6 +95,8 @@
 
     <script>
         let isLoading = false;
+        let currentAssistantMessage = null;
+        let streamingController = null;
 
         function handleKeyPress(event) {
             if (event.key === 'Enter' && !isLoading) {
@@ -99,6 +110,7 @@
             const questionInput = document.getElementById('questionInput');
             const question = questionInput.value.trim();
             const collection = document.getElementById('collectionSelect').value;
+            const isStreaming = document.getElementById('streamingMode').checked;
 
             if (!question) return;
 
@@ -110,9 +122,17 @@
 
             // Show loading
             isLoading = true;
-            addMessage('assistant', 'Думаю...', true);
+            currentAssistantMessage = addMessage('assistant', '', true);
 
-            // Send request
+            if (isStreaming) {
+                sendStreamingQuestion(question, collection);
+            } else {
+                sendRegularQuestion(question, collection);
+            }
+        }
+
+        function sendRegularQuestion(question, collection) {
+            // Send regular request
             fetch('/api/chat', {
                 method: 'POST',
                 body: new URLSearchParams({
@@ -125,11 +145,8 @@
             })
             .then(response => response.json())
             .then(data => {
-                // Remove loading message
-                removeLastMessage();
-
-                // Add response
-                addMessage('assistant', data.response);
+                // Update response
+                updateAssistantMessage(data.response);
 
                 // Add confidence and sources if available
                 if (data.confidence !== undefined) {
@@ -145,12 +162,106 @@
                 }
             })
             .catch(error => {
-                removeLastMessage();
-                addMessage('assistant', 'Произошла ошибка. Попробуйте позже.');
+                updateAssistantMessage('Произошла ошибка. Попробуйте позже.');
                 console.error('Error:', error);
             })
             .finally(() => {
                 isLoading = false;
+                currentAssistantMessage = null;
+            });
+        }
+
+        function sendStreamingQuestion(question, collection) {
+            // Cancel any existing streaming request
+            if (streamingController) {
+                streamingController.abort();
+            }
+
+            streamingController = new AbortController();
+
+            fetch('/api/chat/stream', {
+                method: 'POST',
+                body: new URLSearchParams({
+                    'query': question,
+                    'collection': collection
+                }),
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                signal: streamingController.signal
+            })
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let fullResponse = '';
+                let metadata = null;
+
+                function readStream() {
+                    return reader.read().then(({ done, value }) => {
+                        if (done) {
+                            // Stream finished
+                            if (metadata) {
+                                addMessage('system', `Уверенность: ${(metadata.confidence * 100).toFixed(1)}%`);
+
+                                if (metadata.sources && metadata.sources.length > 0) {
+                                    let sourcesText = 'Источники:\\n';
+                                    metadata.sources.forEach((source, index) => {
+                                        sourcesText += `${index + 1}. ${source.url} (релевантность: ${(source.score * 100).toFixed(1)}%)\\n`;
+                                    });
+                                    addMessage('system', sourcesText);
+                                }
+                            }
+                            isLoading = false;
+                            currentAssistantMessage = null;
+                            streamingController = null;
+                            return;
+                        }
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\\n');
+
+                        // Keep the last potentially incomplete line
+                        buffer = lines.pop();
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const data = line.slice(6);
+                                if (data === '[DONE]') continue;
+
+                                try {
+                                    const chunk = JSON.parse(data);
+
+                                    if (chunk.type === 'metadata') {
+                                        metadata = chunk;
+                                    } else if (chunk.type === 'content') {
+                                        fullResponse += chunk.content;
+                                        updateAssistantMessage(fullResponse + '▊');
+                                    } else if (chunk.type === 'end') {
+                                        updateAssistantMessage(chunk.full_response);
+                                    } else if (chunk.type === 'error') {
+                                        updateAssistantMessage(`Ошибка: ${chunk.error}`);
+                                    }
+                                } catch (e) {
+                                    console.error('Failed to parse SSE:', e);
+                                }
+                            }
+                        }
+
+                        return readStream();
+                    });
+                }
+
+                return readStream();
+            })
+            .catch(error => {
+                if (error.name !== 'AbortError') {
+                    updateAssistantMessage('Произошла ошибка. Попробуйте позже.');
+                    console.error('Streaming error:', error);
+                    isLoading = false;
+                    currentAssistantMessage = null;
+                    streamingController = null;
+                }
             });
         }
 
@@ -167,6 +278,24 @@
             messageDiv.innerHTML = prefix + content.replace(/\\n/g, '<br>');
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+            // Return the message element for streaming updates
+            if (type === 'assistant' && isLoading) {
+                return messageDiv;
+            }
+            return null;
+        }
+
+        function updateAssistantMessage(content) {
+            if (currentAssistantMessage) {
+                let prefix = '<strong>🤖 Помощник:</strong> ';
+                currentAssistantMessage.innerHTML = prefix + content.replace(/\\n/g, '<br>');
+                currentAssistantMessage.classList.remove('loading');
+
+                // Auto-scroll
+                const messagesDiv = document.getElementById('chatMessages');
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
         }
 
         function removeLastMessage() {

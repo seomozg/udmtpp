@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
@@ -7,6 +7,7 @@ import os
 import logging
 import sys
 import time
+import json
 from typing import Optional
 
 # Add src to path for imports
@@ -81,6 +82,41 @@ async def chat_api(
     except Exception as e:
         logger.error(f"Chat API error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/api/chat/stream")
+async def chat_stream_api(
+    query: str = Form(...),
+    collection: Optional[str] = Form(None)
+):
+    """Streaming API endpoint for chat"""
+    async def generate_stream():
+        try:
+            for chunk in rag_system.ask_stream(query, collection):
+                if chunk["type"] == "metadata":
+                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                elif chunk["type"] == "content":
+                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                elif chunk["type"] == "end":
+                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                    yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.error(f"Chat streaming API error: {e}")
+            error_chunk = {
+                "type": "error",
+                "error": str(e)
+            }
+            yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+        }
+    )
 
 @app.get("/api/collections")
 async def get_collections_api():
