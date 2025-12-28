@@ -73,44 +73,7 @@
             {% endfor %}
         </div>
 
-        <!-- Statistics Card -->
-        <div class="card mt-4">
-            <div class="card-header">
-                <h5>📊 Статистика системы</h5>
-            </div>
-            <div class="card-body">
-                <div class="row text-center">
-                    <div class="col-md-3">
-                        <h3 class="text-primary">{{ collections|length }}</h3>
-                        <p>Коллекций</p>
-                    </div>
-                    <div class="col-md-3">
-                        <h3 class="text-success">
-                            {% set total_docs = 0 %}
-                            {% for coll in collections.values() %}
-                                {% set total_docs = total_docs + coll.points_count %}
-                            {% endfor %}
-                            {{ total_docs }}
-                        </h3>
-                        <p>Всего документов</p>
-                    </div>
-                    <div class="col-md-3">
-                        <h3 class="text-info">
-                            {% set total_vectors = 0 %}
-                            {% for coll in collections.values() %}
-                                {% set total_vectors = total_vectors + coll.vectors_count %}
-                            {% endfor %}
-                            {{ total_vectors }}
-                        </h3>
-                        <p>Векторов</p>
-                    </div>
-                    <div class="col-md-3">
-                        <h3 class="text-warning">RAG</h3>
-                        <p>Технология</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+
     </div>
 
     <!-- Modal for viewing collection details -->
