@@ -34,9 +34,9 @@ class RAGSystem:
 Будь полезным и точным в ответах.
 """
 
-    def search_context(self, query: str, collection_name: Optional[str] = None) -> Dict[str, Any]:
+    def search_context(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None) -> Dict[str, Any]:
         """Search for relevant context"""
-        logger.info(f"Searching for query: '{query}' in collection: {collection_name}")
+        logger.info(f"Searching for query: '{query}' in collection: {collection_name}, n_results: {n_results}")
 
         # Use same encoding method as documents for consistency
         query_embeddings = self.embedder.encode([query])
@@ -45,6 +45,8 @@ class RAGSystem:
 
         if collection_name:
             collections = [collection_name]
+        elif collections_filter:
+            collections = collections_filter
         else:
             collections = list(self.chroma_db.collection_configs.keys())
 
@@ -53,7 +55,7 @@ class RAGSystem:
             try:
                 logger.info(f"Searching in collection '{coll}'")
                 # Use ChromaDB search method
-                results = self.chroma_db.search(coll, query_embedding, self.top_k)
+                results = self.chroma_db.search(coll, query_embedding, n_results)
                 logger.info(f"Found {len(results)} results in {coll}")
                 all_results.extend(results)
 
@@ -64,7 +66,7 @@ class RAGSystem:
 
         # Sort by score and take top results
         all_results.sort(key=lambda x: x['score'], reverse=True)
-        top_results = all_results[:self.top_k]
+        top_results = all_results[:n_results]
 
         logger.info(f"Top {len(top_results)} results selected")
 
@@ -188,12 +190,12 @@ class RAGSystem:
             logger.error(f"Error in streaming response: {e}")
             yield f"\n\nПроизошла ошибка при обработке запроса: {str(e)}"
 
-    def ask(self, query: str, collection_name: Optional[str] = None) -> Dict[str, Any]:
+    def ask(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None) -> Dict[str, Any]:
         """Main method to ask questions"""
-        logger.info(f"Processing query: {query}")
+        logger.info(f"Processing query: {query} with n_results={n_results}")
 
         # Search context
-        search_result = self.search_context(query, collection_name)
+        search_result = self.search_context(query, collection_name, n_results=n_results, collections_filter=collections_filter)
 
         # Generate response
         response = self.generate_response(query, search_result["context"], search_result["confidence"])
@@ -205,12 +207,12 @@ class RAGSystem:
             "sources": search_result["sources"]
         }
 
-    async def ask_stream(self, query: str, collection_name: Optional[str] = None):
+    async def ask_stream(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None):
         """Main method to ask questions with streaming response"""
-        logger.info(f"Processing streaming query: {query}")
+        logger.info(f"Processing streaming query: {query} with n_results={n_results}")
 
         # Search context
-        search_result = self.search_context(query, collection_name)
+        search_result = self.search_context(query, collection_name, n_results=n_results, collections_filter=collections_filter)
 
         # Yield metadata first
         yield {

@@ -73,25 +73,54 @@ async def upload_page(request: Request):
 @app.post("/api/chat")
 async def chat_api(
     query: str = Form(...),
-    collection: Optional[str] = Form(None)
+    collection: Optional[str] = Form(None),
+    temperature: float = Form(0.1),
+    max_tokens: int = Form(1000),
+    n_results: int = Form(5),
+    confidence_threshold: float = Form(0.7),
+    collections_filter: Optional[str] = Form(None)
 ):
     """API endpoint for chat"""
     try:
-        result = rag_system.ask(query, collection)
+        # Parse collections filter if provided
+        collections_list = None
+        if collections_filter:
+            collections_list = collections_filter.split(',') if collections_filter else None
+
+        # Create custom RAG instance with user settings
+        custom_rag = RAGSystem()
+        custom_rag.confidence_threshold = confidence_threshold
+
+        result = custom_rag.ask(query, collection, n_results=n_results, collections_filter=collections_list)
+
         return JSONResponse(content=result)
     except Exception as e:
         logger.error(f"Chat API error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.post("/api/chat/stream")
+@app.get("/api/chat/stream")
 async def chat_stream_api(
-    query: str = Form(...),
-    collection: Optional[str] = Form(None)
+    query: str,
+    collection: Optional[str] = None,
+    temperature: float = 0.1,
+    max_tokens: int = 1000,
+    n_results: int = 5,
+    confidence_threshold: float = 0.7,
+    collections_filter: Optional[str] = None
 ):
     """Streaming API endpoint for chat"""
+    # Parse collections filter if provided
+    collections_list = None
+    if collections_filter:
+        collections_list = collections_filter.split(',') if collections_filter else None
+
+    # Create custom RAG instance with user settings
+    custom_rag = RAGSystem()
+    custom_rag.confidence_threshold = confidence_threshold
+
     async def generate_stream():
         try:
-            async for chunk in rag_system.ask_stream(query, collection):
+            async for chunk in custom_rag.ask_stream(query, collection, n_results=n_results, collections_filter=collections_list):
                 if chunk["type"] == "metadata":
                     yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
                 elif chunk["type"] == "content":
@@ -115,6 +144,9 @@ async def chat_stream_api(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
         }
     )
 
@@ -250,10 +282,6 @@ async def rebuild_from_cache_api():
 
         files = [f for f in os.listdir(cache_dir) if f.endswith('.txt')]
         logger.info(f"Found {len(files)} files in cache")
-
-        # TEMPORARY LIMIT: Process only first 10 files for testing
-        files = files[:10]
-        logger.info(f"TEMPORARY LIMIT: Processing only first {len(files)} files")
 
         processed_count = 0
         total_points = 0

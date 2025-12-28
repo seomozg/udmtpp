@@ -60,6 +60,87 @@
                             </div>
                         </div>
 
+                        <div class="mb-3">
+                            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#advancedSettings">
+                                ⚙️ Расширенные настройки поиска
+                            </button>
+                        </div>
+
+                        <div class="collapse" id="advancedSettings">
+                            <div class="card card-body bg-light">
+                                <h6 class="card-title">🔧 Параметры поиска и генерации</h6>
+
+                                <!-- DeepSeek Settings -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="temperature" class="form-label small">Temperature (креативность)</label>
+                                        <input type="range" class="form-range" id="temperature" min="0" max="1" step="0.1" value="0.1">
+                                        <div class="d-flex justify-content-between">
+                                            <small class="text-muted">Точный</small>
+                                            <small id="temperatureValue" class="text-muted">0.1</small>
+                                            <small class="text-muted">Креативный</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="maxTokens" class="form-label small">Max Tokens (длина ответа)</label>
+                                        <input type="range" class="form-range" id="maxTokens" min="500" max="2000" step="100" value="1000">
+                                        <div class="d-flex justify-content-between">
+                                            <small class="text-muted">Короткий</small>
+                                            <small id="maxTokensValue" class="text-muted">1000</small>
+                                            <small class="text-muted">Длинный</small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- ChromaDB Settings -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="nResults" class="form-label small">Количество результатов поиска</label>
+                                        <input type="range" class="form-range" id="nResults" min="3" max="20" step="1" value="5">
+                                        <div class="d-flex justify-content-between">
+                                            <small class="text-muted">Мало</small>
+                                            <small id="nResultsValue" class="text-muted">5</small>
+                                            <small class="text-muted">Много</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="confidenceThreshold" class="form-label small">Порог уверенности</label>
+                                        <input type="range" class="form-range" id="confidenceThreshold" min="0.3" max="0.9" step="0.1" value="0.7">
+                                        <div class="d-flex justify-content-between">
+                                            <small class="text-muted">Низкий</small>
+                                            <small id="confidenceThresholdValue" class="text-muted">0.7</small>
+                                            <small class="text-muted">Высокий</small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Collection Filters -->
+                                <div class="mb-3">
+                                    <label class="form-label small">Фильтр по коллекциям (оставьте пустым для всех)</label>
+                                    <div class="row">
+                                        {% for collection_id, collection_data in collections.items() %}
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input class="form-check-input collection-filter" type="checkbox"
+                                                       id="filter_{{ collection_id }}" value="{{ collection_id }}" checked>
+                                                <label class="form-check-label small" for="filter_{{ collection_id }}">
+                                                    {{ collection_data.description }} ({{ collection_data.points_count }})
+                                                </label>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+
+                                <!-- Reset Button -->
+                                <div class="d-flex justify-content-end">
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="resetSettings()">
+                                        🔄 Сбросить настройки
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="chatMessages" class="chat-messages mb-3" style="height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background-color: #f8f9fa;">
                             <div class="message assistant-message">
                                 <strong>🤖 Помощник:</strong> Здравствуйте! Я ИИ-помощник ТПП Удмуртской Республики. Задайте мне вопрос о наших услугах, мероприятиях или другой информации с сайта udmtpp.ru
@@ -132,13 +213,26 @@
         }
 
         function sendRegularQuestion(question, collection) {
+            // Get advanced settings
+            const settings = getAdvancedSettings();
+
+            // Build form data with settings
+            const formData = new URLSearchParams({
+                'query': question,
+                'collection': collection || '',
+                'temperature': settings.temperature,
+                'max_tokens': settings.maxTokens,
+                'n_results': settings.nResults,
+                'confidence_threshold': settings.confidenceThreshold,
+                'collections_filter': settings.collections.join(',')
+            });
+
+            console.log('Sending regular request with settings:', settings);
+
             // Send regular request
             fetch('/api/chat', {
                 method: 'POST',
-                body: new URLSearchParams({
-                    'query': question,
-                    'collection': collection
-                }),
+                body: formData,
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 }
@@ -172,97 +266,97 @@
         }
 
         function sendStreamingQuestion(question, collection) {
-            // Cancel any existing streaming request
-            if (streamingController) {
-                streamingController.abort();
+            // Cancel any existing EventSource
+            if (window.currentEventSource) {
+                window.currentEventSource.close();
+                window.currentEventSource = null;
             }
 
-            streamingController = new AbortController();
+            // Get advanced settings
+            const settings = getAdvancedSettings();
 
-            fetch('/api/chat/stream', {
-                method: 'POST',
-                body: new URLSearchParams({
-                    'query': question,
-                    'collection': collection
-                }),
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                signal: streamingController.signal
-            })
-            .then(response => {
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let buffer = '';
-                let fullResponse = '';
-                let metadata = null;
+            // Build URL with all parameters
+            let url = `/api/chat/stream?query=${encodeURIComponent(question)}`;
+            if (collection) url += `&collection=${encodeURIComponent(collection)}`;
+            url += `&temperature=${settings.temperature}`;
+            url += `&max_tokens=${settings.maxTokens}`;
+            url += `&n_results=${settings.nResults}`;
+            url += `&confidence_threshold=${settings.confidenceThreshold}`;
+            if (settings.collections.length > 0) {
+                url += `&collections_filter=${encodeURIComponent(settings.collections.join(','))}`;
+            }
 
-                function readStream() {
-                    return reader.read().then(({ done, value }) => {
-                        if (done) {
-                            // Stream finished
-                            if (metadata) {
-                                addMessage('system', `Уверенность: ${(metadata.confidence * 100).toFixed(1)}%`);
+            console.log('Starting EventSource with URL:', url);
+            console.log('Settings:', settings);
 
-                                if (metadata.sources && metadata.sources.length > 0) {
-                                    let sourcesText = 'Источники:\\n';
-                                    metadata.sources.forEach((source, index) => {
-                                        sourcesText += `${index + 1}. ${source.url} (релевантность: ${(source.score * 100).toFixed(1)}%)\\n`;
-                                    });
-                                    addMessage('system', sourcesText);
-                                }
-                            }
-                            isLoading = false;
-                            currentAssistantMessage = null;
-                            streamingController = null;
-                            return;
-                        }
+            const eventSource = new EventSource(url);
+            window.currentEventSource = eventSource;
 
-                        buffer += decoder.decode(value, { stream: true });
-                        const lines = buffer.split('\\n');
+            let fullResponse = '';
+            let metadata = null;
 
-                        // Keep the last potentially incomplete line
-                        buffer = lines.pop();
+            eventSource.onmessage = function(event) {
+                console.log('Received message:', event.data);
 
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                const data = line.slice(6);
-                                if (data === '[DONE]') continue;
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('Parsed data:', data);
 
-                                try {
-                                    const chunk = JSON.parse(data);
+                    if (data.type === 'metadata') {
+                        metadata = data;
+                        console.log('Metadata received:', metadata);
+                    } else if (data.type === 'content') {
+                        fullResponse += data.content;
+                        updateAssistantMessage(fullResponse + '▊');
+                        console.log('Content chunk:', data.content);
+                        console.log('Current full response:', fullResponse);
+                    } else if (data.type === 'end') {
+                        updateAssistantMessage(data.full_response);
+                        console.log('Stream ended, final response:', data.full_response);
 
-                                    if (chunk.type === 'metadata') {
-                                        metadata = chunk;
-                                    } else if (chunk.type === 'content') {
-                                        fullResponse += chunk.content;
-                                        updateAssistantMessage(fullResponse + '▊');
-                                    } else if (chunk.type === 'end') {
-                                        updateAssistantMessage(chunk.full_response);
-                                    } else if (chunk.type === 'error') {
-                                        updateAssistantMessage(`Ошибка: ${chunk.error}`);
-                                    }
-                                } catch (e) {
-                                    console.error('Failed to parse SSE:', e);
-                                }
+                        // Show metadata after streaming
+                        if (metadata) {
+                            addMessage('system', `Уверенность: ${(metadata.confidence * 100).toFixed(1)}%`);
+
+                            if (metadata.sources && metadata.sources.length > 0) {
+                                let sourcesText = 'Источники:\\n';
+                                metadata.sources.forEach((source, index) => {
+                                    sourcesText += `${index + 1}. ${source.url} (релевантность: ${(source.score * 100).toFixed(1)}%)\\n`;
+                                });
+                                addMessage('system', sourcesText);
                             }
                         }
 
-                        return readStream();
-                    });
+                        // Cleanup
+                        eventSource.close();
+                        window.currentEventSource = null;
+                        isLoading = false;
+                        currentAssistantMessage = null;
+                    } else if (data.type === 'error') {
+                        updateAssistantMessage(`Ошибка: ${data.error}`);
+                        console.error('Stream error:', data.error);
+                        eventSource.close();
+                        window.currentEventSource = null;
+                        isLoading = false;
+                        currentAssistantMessage = null;
+                    }
+                } catch (e) {
+                    console.error('Failed to parse message:', event.data, e);
                 }
+            };
 
-                return readStream();
-            })
-            .catch(error => {
-                if (error.name !== 'AbortError') {
-                    updateAssistantMessage('Произошла ошибка. Попробуйте позже.');
-                    console.error('Streaming error:', error);
-                    isLoading = false;
-                    currentAssistantMessage = null;
-                    streamingController = null;
-                }
-            });
+            eventSource.onerror = function(event) {
+                console.error('EventSource error:', event);
+                updateAssistantMessage('Произошла ошибка при стриминге. Попробуйте позже.');
+                eventSource.close();
+                window.currentEventSource = null;
+                isLoading = false;
+                currentAssistantMessage = null;
+            };
+
+            eventSource.onopen = function(event) {
+                console.log('EventSource connection opened');
+            };
         }
 
         function addMessage(type, content, isLoading = false) {
@@ -305,6 +399,79 @@
                 messagesDiv.removeChild(lastMessage);
             }
         }
+
+        // Settings management
+        function updateSliderValue(sliderId, valueId) {
+            const slider = document.getElementById(sliderId);
+            const value = document.getElementById(valueId);
+            value.textContent = slider.value;
+
+            // Update color based on value
+            const percentage = (slider.value - slider.min) / (slider.max - slider.min) * 100;
+            slider.style.background = `linear-gradient(to right, #0d6efd 0%, #0d6efd ${percentage}%, #dee2e6 ${percentage}%, #dee2e6 100%)`;
+        }
+
+        function resetSettings() {
+            // Reset DeepSeek settings
+            document.getElementById('temperature').value = 0.1;
+            document.getElementById('maxTokens').value = 1000;
+
+            // Reset ChromaDB settings
+            document.getElementById('nResults').value = 5;
+            document.getElementById('confidenceThreshold').value = 0.7;
+
+            // Reset collection filters
+            document.querySelectorAll('.collection-filter').forEach(checkbox => {
+                checkbox.checked = true;
+            });
+
+            // Update all display values
+            updateSliderValue('temperature', 'temperatureValue');
+            updateSliderValue('maxTokens', 'maxTokensValue');
+            updateSliderValue('nResults', 'nResultsValue');
+            updateSliderValue('confidenceThreshold', 'confidenceThresholdValue');
+        }
+
+        function getAdvancedSettings() {
+            const settings = {
+                // DeepSeek settings
+                temperature: parseFloat(document.getElementById('temperature').value),
+                maxTokens: parseInt(document.getElementById('maxTokens').value),
+
+                // ChromaDB settings
+                nResults: parseInt(document.getElementById('nResults').value),
+                confidenceThreshold: parseFloat(document.getElementById('confidenceThreshold').value),
+
+                // Collection filters
+                collections: Array.from(document.querySelectorAll('.collection-filter:checked')).map(cb => cb.value)
+            };
+
+            return settings;
+        }
+
+        // Initialize sliders
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up slider event listeners
+            const sliders = [
+                { slider: 'temperature', value: 'temperatureValue' },
+                { slider: 'maxTokens', value: 'maxTokensValue' },
+                { slider: 'nResults', value: 'nResultsValue' },
+                { slider: 'confidenceThreshold', value: 'confidenceThresholdValue' }
+            ];
+
+            sliders.forEach(({ slider, value }) => {
+                const sliderEl = document.getElementById(slider);
+                const valueEl = document.getElementById(value);
+
+                // Set initial values
+                updateSliderValue(slider, value);
+
+                // Add event listener
+                sliderEl.addEventListener('input', function() {
+                    updateSliderValue(slider, value);
+                });
+            });
+        });
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
