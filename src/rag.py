@@ -18,21 +18,44 @@ from embed import EmbeddingModel
 logger = logging.getLogger(__name__)
 
 class RAGSystem:
-    def __init__(self):
-        self.chroma_db = ChromaDB()
-        self.embedder = EmbeddingModel()
-        self.deepseek_api_key = get_env_var("DEEPSEEK_API_KEY")
-        self.deepseek_base_url = get_env_var("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-        self.top_k = int(get_env_var("TOP_K", "5"))
-        self.confidence_threshold = float(get_env_var("CONFIDENCE_THRESHOLD", "0.7"))
+    _instance = None
 
-        self.system_prompt = """
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        if not hasattr(self, 'initialized'):
+            self.chroma_db = ChromaDB()
+            self.embedder = EmbeddingModel()
+            self.deepseek_api_key = get_env_var("DEEPSEEK_API_KEY")
+            self.deepseek_base_url = get_env_var("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+            self.top_k = int(get_env_var("TOP_K", "5"))
+            self.confidence_threshold = float(get_env_var("CONFIDENCE_THRESHOLD", "0.7"))
+
+            self.system_prompt = """
 Ты — ассистент ТПП УР.
 Отвечай только на основе предоставленного контекста. Не придумывай факты.
 Если информации недостаточно — попроси уточнить вопрос.
 Если найденные данные неуверенны (confidence < 0.7) — уточни вопрос.
 Будь полезным и точным в ответах.
 """
+            self.initialized = True
+
+    def clone_with_settings(self, confidence_threshold: Optional[float] = None):
+        """Create a clone with custom settings without reinitializing heavy components"""
+        # Create new instance but share heavy components
+        clone = RAGSystem.__new__(RAGSystem)
+        clone.chroma_db = self.chroma_db  # Share ChromaDB instance
+        clone.embedder = self.embedder    # Share embedder instance
+        clone.deepseek_api_key = self.deepseek_api_key
+        clone.deepseek_base_url = self.deepseek_base_url
+        clone.top_k = self.top_k
+        clone.confidence_threshold = confidence_threshold if confidence_threshold is not None else self.confidence_threshold
+        clone.system_prompt = self.system_prompt
+        clone.initialized = True
+        return clone
 
     def search_context(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None) -> Dict[str, Any]:
         """Search for relevant context"""

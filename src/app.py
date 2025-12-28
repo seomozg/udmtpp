@@ -40,7 +40,7 @@ templates = Jinja2Templates(directory=templates_dir)
 
 # Initialize components
 chroma_db = ChromaDB()
-rag_system = RAGSystem()
+rag_system = RAGSystem()  # Global singleton instance
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
@@ -87,9 +87,8 @@ async def chat_api(
         if collections_filter:
             collections_list = collections_filter.split(',') if collections_filter else None
 
-        # Create custom RAG instance with user settings
-        custom_rag = RAGSystem()
-        custom_rag.confidence_threshold = confidence_threshold
+        # Create custom RAG instance with user settings (clone for performance)
+        custom_rag = rag_system.clone_with_settings(confidence_threshold=confidence_threshold)
 
         result = custom_rag.ask(query, collection, n_results=n_results, collections_filter=collections_list)
 
@@ -114,9 +113,8 @@ async def chat_stream_api(
     if collections_filter:
         collections_list = collections_filter.split(',') if collections_filter else None
 
-    # Create custom RAG instance with user settings
-    custom_rag = RAGSystem()
-    custom_rag.confidence_threshold = confidence_threshold
+    # Create custom RAG instance with user settings (clone for performance)
+    custom_rag = rag_system.clone_with_settings(confidence_threshold=confidence_threshold)
 
     async def generate_stream():
         try:
