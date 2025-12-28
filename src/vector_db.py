@@ -165,6 +165,43 @@ class ChromaDB:
         logger.info(f"Total points across all collections: {total_points}")
         return info
 
+    def get_collection_documents(self, collection_name: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get documents from a collection"""
+        logger.info(f"Getting documents from {collection_name}, limit: {limit}")
+
+        if collection_name not in self.collections:
+            logger.error(f"Collection {collection_name} not found")
+            return []
+
+        collection = self.collections[collection_name]
+
+        try:
+            # Get all documents with metadata
+            results = collection.get(
+                include=['metadatas', 'documents'],
+                limit=limit
+            )
+
+            documents = []
+            if results['ids']:
+                for i, doc_id in enumerate(results['ids']):
+                    documents.append({
+                        "id": doc_id,
+                        "text": results['documents'][i] if results['documents'] else "",
+                        "metadata": results['metadatas'][i] if results['metadatas'] else {},
+                        "url": results['metadatas'][i].get('url', '') if results['metadatas'] else '',
+                        "filename": results['metadatas'][i].get('filename', '') if results['metadatas'] else '',
+                        "category": results['metadatas'][i].get('category', '') if results['metadatas'] else '',
+                        "chunk_index": results['metadatas'][i].get('chunk_index', 0) if results['metadatas'] else 0
+                    })
+
+            logger.info(f"Retrieved {len(documents)} documents from {collection_name}")
+            return documents
+
+        except Exception as e:
+            logger.error(f"Error getting documents from {collection_name}: {e}")
+            return []
+
     def delete_collection(self, collection_name: str):
         """Delete a collection"""
         try:

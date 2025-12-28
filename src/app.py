@@ -160,6 +160,22 @@ async def get_collections_api():
         logger.error(f"Collections API error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/api/collections/{collection_id}/documents")
+async def get_collection_documents_api(collection_id: str, limit: int = 50):
+    """Get documents from a specific collection"""
+    try:
+        # Get documents from ChromaDB
+        documents = chroma_db.get_collection_documents(collection_id, limit)
+
+        return JSONResponse(content={
+            "collection_id": collection_id,
+            "documents": documents,
+            "total_count": len(documents)
+        })
+    except Exception as e:
+        logger.error(f"Collection documents API error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving documents: {str(e)}")
+
 @app.post("/api/upload")
 async def upload_file(
     file: UploadFile = File(...),

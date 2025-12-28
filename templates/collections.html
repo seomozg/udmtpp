@@ -157,14 +157,85 @@
         }
 
         function viewCollection(collectionId) {
-            // For demo purposes, show basic info
             const modal = new bootstrap.Modal(document.getElementById('collectionModal'));
-            document.getElementById('collectionContent').innerHTML = `
-                <p><strong>Коллекция:</strong> ${collectionId}</p>
-                <p>Просмотр содержимого коллекции пока не реализован в веб-интерфейсе.</p>
-                <p>Используйте API или администрирование Qdrant для детального просмотра.</p>
+            const modalTitle = document.querySelector('#collectionModal .modal-title');
+            const modalContent = document.getElementById('collectionContent');
+
+            modalTitle.textContent = `Просмотр коллекции: ${collectionId}`;
+            modalContent.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                    <p>Загружаю документы...</p>
+                </div>
             `;
+
             modal.show();
+
+            // Load documents from API
+            fetch(`/api/collections/${collectionId}/documents?limit=20`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.documents && data.documents.length > 0) {
+                        let html = `
+                            <div class="mb-3">
+                                <h6>Найдено документов: ${data.total_count}</h6>
+                                <small class="text-muted">Показаны первые 20 документов</small>
+                            </div>
+                            <div class="list-group" style="max-height: 400px; overflow-y: auto;">
+                        `;
+
+                        data.documents.forEach((doc, index) => {
+                            const shortText = doc.text.length > 200 ?
+                                doc.text.substring(0, 200) + '...' :
+                                doc.text;
+
+                            const url = doc.url || doc.filename || 'N/A';
+                            const category = doc.category || collectionId;
+                            const chunkIndex = doc.chunk_index || 0;
+
+                            html += `
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">Документ ${index + 1}</h6>
+                                        <small class="text-muted">Чанк ${chunkIndex}</small>
+                                    </div>
+                                    <p class="mb-1">${shortText}</p>
+                                    <div class="d-flex justify-content-between">
+                                        <small class="text-muted">Категория: ${category}</small>
+                                        <small class="text-muted">
+                                            ${url.length > 50 ? url.substring(0, 50) + '...' : url}
+                                        </small>
+                                    </div>
+                                </div>
+                            `;
+                        });
+
+                        html += `
+                            </div>
+                            ${data.total_count > 20 ? '<div class="mt-2"><small class="text-muted">Используйте API для просмотра всех документов</small></div>' : ''}
+                        `;
+
+                        modalContent.innerHTML = html;
+                    } else {
+                        modalContent.innerHTML = `
+                            <div class="alert alert-info">
+                                <h6>Коллекция пуста</h6>
+                                <p>В коллекции "${collectionId}" нет документов.</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading collection documents:', error);
+                    modalContent.innerHTML = `
+                        <div class="alert alert-danger">
+                            <h6>Ошибка загрузки</h6>
+                            <p>Не удалось загрузить документы коллекции: ${error.message}</p>
+                        </div>
+                    `;
+                });
         }
 
         function clearCollection(collectionId) {
