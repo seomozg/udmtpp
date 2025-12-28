@@ -114,23 +114,7 @@
                                     </div>
                                 </div>
 
-                                <!-- Collection Filters -->
-                                <div class="mb-3">
-                                    <label class="form-label small">Фильтр по коллекциям (оставьте пустым для всех)</label>
-                                    <div class="row">
-                                        {% for collection_id, collection_data in collections.items() %}
-                                        <div class="col-md-6">
-                                            <div class="form-check">
-                                                <input class="form-check-input collection-filter" type="checkbox"
-                                                       id="filter_{{ collection_id }}" value="{{ collection_id }}" checked>
-                                                <label class="form-check-label small" for="filter_{{ collection_id }}">
-                                                    {{ collection_data.description }} ({{ collection_data.points_count }})
-                                                </label>
-                                            </div>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                </div>
+
 
                                 <!-- Reset Button -->
                                 <div class="d-flex justify-content-end">
@@ -419,11 +403,6 @@
             // Reset ChromaDB settings
             document.getElementById('nResults').value = 5;
             document.getElementById('confidenceThreshold').value = 0.7;
-
-            // Reset collection filters
-            document.querySelectorAll('.collection-filter').forEach(checkbox => {
-                checkbox.checked = true;
-            });
 
             // Update all display values
             updateSliderValue('temperature', 'temperatureValue');
