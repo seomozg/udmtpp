@@ -91,7 +91,7 @@ async def chat_stream_api(
     """Streaming API endpoint for chat"""
     async def generate_stream():
         try:
-            for chunk in rag_system.ask_stream(query, collection):
+            async for chunk in rag_system.ask_stream(query, collection):
                 if chunk["type"] == "metadata":
                     yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
                 elif chunk["type"] == "content":
