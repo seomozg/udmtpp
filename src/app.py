@@ -32,7 +32,9 @@ os.makedirs("static/css", exist_ok=True)
 os.makedirs("static/js", exist_ok=True)
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+import os
+static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Templates
 templates_dir = os.path.join(os.path.dirname(__file__), "..", "templates")
