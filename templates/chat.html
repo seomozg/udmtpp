@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Чат - ТПП УР Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">ТПП УР AI-Assistant</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Главная</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/collections">Коллекции</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/chat">AI Чат</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/upload">Загрузка</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>💬 AI Чат с помощником ТПП УР</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="collectionSelect" class="form-label">Выберите коллекцию (опционально):</label>
+                            <select class="form-select" id="collectionSelect">
+                                <option value="">Все коллекции</option>
+                                {% for collection_id, collection_data in collections.items() %}
+                                <option value="{{ collection_id }}">{{ collection_data.description }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div id="chatMessages" class="chat-messages mb-3" style="height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background-color: #f8f9fa;">
+                            <div class="message assistant-message">
+                                <strong>🤖 Помощник:</strong> Здравствуйте! Я ИИ-помощник ТПП Удмуртской Республики. Задайте мне вопрос о наших услугах, мероприятиях или другой информации с сайта udmtpp.ru
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <input type="text" id="questionInput" class="form-control" placeholder="Введите ваш вопрос..." onkeypress="handleKeyPress(event)">
+                            <button class="btn btn-primary" onclick="sendQuestion()">Отправить</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6>📚 Доступные коллекции</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group">
+                            {% for collection_id, collection_data in collections.items() %}
+                            <div class="list-group-item">
+                                <h6 class="mb-1">{{ collection_data.description }}</h6>
+                                <small class="text-muted">{{ collection_data.points_count }} документов</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isLoading = false;
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !isLoading) {
+                sendQuestion();
+            }
+        }
+
+        function sendQuestion() {
+            if (isLoading) return;
+
+            const questionInput = document.getElementById('questionInput');
+            const question = questionInput.value.trim();
+            const collection = document.getElementById('collectionSelect').value;
+
+            if (!question) return;
+
+            // Add user message
+            addMessage('user', question);
+
+            // Clear input
+            questionInput.value = '';
+
+            // Show loading
+            isLoading = true;
+            addMessage('assistant', 'Думаю...', true);
+
+            // Send request
+            fetch('/api/chat', {
+                method: 'POST',
+                body: new URLSearchParams({
+                    'query': question,
+                    'collection': collection
+                }),
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove loading message
+                removeLastMessage();
+
+                // Add response
+                addMessage('assistant', data.response);
+
+                // Add confidence and sources if available
+                if (data.confidence !== undefined) {
+                    addMessage('system', `Уверенность: ${(data.confidence * 100).toFixed(1)}%`);
+                }
+
+                if (data.sources && data.sources.length > 0) {
+                    let sourcesText = 'Источники:\\n';
+                    data.sources.forEach((source, index) => {
+                        sourcesText += `${index + 1}. ${source.url} (релевантность: ${(source.score * 100).toFixed(1)}%)\\n`;
+                    });
+                    addMessage('system', sourcesText);
+                }
+            })
+            .catch(error => {
+                removeLastMessage();
+                addMessage('assistant', 'Произошла ошибка. Попробуйте позже.');
+                console.error('Error:', error);
+            })
+            .finally(() => {
+                isLoading = false;
+            });
+        }
+
+        function addMessage(type, content, isLoading = false) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message ${isLoading ? 'loading' : ''}`;
+
+            let prefix = '';
+            if (type === 'user') prefix = '<strong>👤 Вы:</strong> ';
+            else if (type === 'assistant') prefix = '<strong>🤖 Помощник:</strong> ';
+            else if (type === 'system') prefix = '<small class="text-muted">ℹ️ Система:</small> ';
+
+            messageDiv.innerHTML = prefix + content.replace(/\\n/g, '<br>');
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function removeLastMessage() {
+            const messagesDiv = document.getElementById('chatMessages');
+            const lastMessage = messagesDiv.lastElementChild;
+            if (lastMessage) {
+                messagesDiv.removeChild(lastMessage);
+            }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

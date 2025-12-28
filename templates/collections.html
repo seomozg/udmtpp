@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Коллекции - ТПП УР Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">ТПП УР AI-Assistant</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Главная</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/collections">Коллекции</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/chat">AI Чат</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/upload">Загрузка</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>📚 Управление коллекциями данных</h2>
+            <button class="btn btn-success" onclick="parseSite()">🔄 Обновить с сайта</button>
+        </div>
+
+        <div class="row">
+            {% for collection_id, collection_data in collections.items() %}
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">{{ collection_data.description }}</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-sm-6">
+                                <p class="mb-1"><strong>ID:</strong> {{ collection_id }}</p>
+                                <p class="mb-1"><strong>Документов:</strong> {{ collection_data.points_count }}</p>
+                            </div>
+                            <div class="col-sm-6">
+                                <p class="mb-1"><strong>Векторов:</strong> {{ collection_data.vectors_count }}</p>
+                                <p class="mb-1"><strong>Статус:</strong>
+                                    <span class="badge bg-success">Активна</span>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button class="btn btn-sm btn-outline-primary me-2" onclick="viewCollection('{{ collection_id }}')">
+                                👁️ Просмотр
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="clearCollection('{{ collection_id }}')">
+                                🗑️ Очистить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Statistics Card -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5>📊 Статистика системы</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <h3 class="text-primary">{{ collections|length }}</h3>
+                        <p>Коллекций</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h3 class="text-success">
+                            {% set total_docs = 0 %}
+                            {% for coll in collections.values() %}
+                                {% set total_docs = total_docs + coll.points_count %}
+                            {% endfor %}
+                            {{ total_docs }}
+                        </h3>
+                        <p>Всего документов</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h3 class="text-info">
+                            {% set total_vectors = 0 %}
+                            {% for coll in collections.values() %}
+                                {% set total_vectors = total_vectors + coll.vectors_count %}
+                            {% endfor %}
+                            {{ total_vectors }}
+                        </h3>
+                        <p>Векторов</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h3 class="text-warning">RAG</h3>
+                        <p>Технология</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for viewing collection details -->
+    <div class="modal fade" id="collectionModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Просмотр коллекции</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="collectionContent">
+                        <!-- Content will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function parseSite() {
+            if (confirm('Начать парсинг сайта udmtpp.ru? Это может занять некоторое время.')) {
+                const button = event.target;
+                button.disabled = true;
+                button.innerHTML = '⏳ Обработка...';
+
+                fetch('/api/parse-site', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    location.reload();
+                })
+                .catch(error => {
+                    alert('Ошибка при парсинге сайта');
+                    console.error('Error:', error);
+                })
+                .finally(() => {
+                    button.disabled = false;
+                    button.innerHTML = '🔄 Обновить с сайта';
+                });
+            }
+        }
+
+        function viewCollection(collectionId) {
+            // For demo purposes, show basic info
+            const modal = new bootstrap.Modal(document.getElementById('collectionModal'));
+            document.getElementById('collectionContent').innerHTML = `
+                <p><strong>Коллекция:</strong> ${collectionId}</p>
+                <p>Просмотр содержимого коллекции пока не реализован в веб-интерфейсе.</p>
+                <p>Используйте API или администрирование Qdrant для детального просмотра.</p>
+            `;
+            modal.show();
+        }
+
+        function clearCollection(collectionId) {
+            if (confirm(`Очистить коллекцию "${collectionId}"? Это действие нельзя отменить.`)) {
+                alert('Функция очистки коллекции пока не реализована в веб-интерфейсе.');
+                // TODO: Implement collection clearing
+            }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

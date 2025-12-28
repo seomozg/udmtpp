@@ -1,0 +1,96 @@
+/* Custom styles for TPP UR AI Assistant */
+
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+.jumbotron {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.card {
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.chat-messages {
+    border-radius: 8px;
+}
+
+.message {
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+
+.user-message {
+    background-color: #007bff;
+    color: white;
+    margin-left: auto;
+    max-width: 70%;
+}
+
+.assistant-message {
+    background-color: #e9ecef;
+    color: #212529;
+    margin-right: auto;
+    max-width: 70%;
+}
+
+.system-message {
+    background-color: #fff3cd;
+    color: #856404;
+    font-size: 0.9em;
+    max-width: 80%;
+}
+
+.loading {
+    opacity: 0.6;
+}
+
+.btn {
+    border-radius: 6px;
+}
+
+.form-control:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+.progress {
+    height: 6px;
+}
+
+.alert {
+    border-radius: 8px;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding-left: 15px;
+        padding-right: 15px;
+    }
+
+    .chat-messages {
+        height: 300px;
+    }
+
+    .user-message, .assistant-message {
+        max-width: 85%;
+    }
+}
