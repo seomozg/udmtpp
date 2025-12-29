@@ -1,6 +1,8 @@
 import pytest
 import sys
 import os
+from unittest.mock import patch, MagicMock
+
 # Add src to path
 src_path = os.path.join(os.path.dirname(__file__), '..')
 sys.path.insert(0, src_path)
@@ -17,10 +19,10 @@ class TestRAGIntegration:
         vector_db = ChromaDB()
         rag = RAGSystem()
 
-        # Create test data
+        # Create test data with fixed vector for consistency
         test_text = "ТПП предоставляет консультации по налогам и юридическим вопросам"
-        test_vectors = rag.embedder.encode(["налоговые консультации"])  # Get embedding
-        test_vector = test_vectors[0] if test_vectors else []
+        # Use a fixed test vector instead of relying on embedder
+        test_vector = [0.1] * 768  # Standard embedding dimension
 
         # Create point
         point = PointStruct(
@@ -28,7 +30,8 @@ class TestRAGIntegration:
             vector=test_vector,
             payload={
                 "text": test_text,
-                "url": "http://test.com"
+                "url": "http://test.com",
+                "category": "services"
             }
         )
 
@@ -39,31 +42,48 @@ class TestRAGIntegration:
         results = vector_db.search("services", test_vector, limit=5)
         assert len(results) > 0, "Search should return results"
 
-        # Test RAG ask method
-        response = rag.ask("Какие услуги предоставляет ТПП?", "services")
-        assert isinstance(response, dict)
-        assert "response" in response
-        assert "confidence" in response
-        assert "sources" in response
+        # Test RAG ask method (mock API call to avoid external dependencies)
+        with patch('rag.requests.post') as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                'choices': [{'message': {'content': 'ТПП предоставляет консультации по налогам'}}]
+            }
+            mock_post.return_value = mock_response
 
-        # Should find the test data (with proper similarity scoring)
-        assert response["confidence"] >= 0.0, f"Confidence should be >= 0, got {response['confidence']}"
-        assert len(response["sources"]) > 0, "Should have sources"
+            response = rag.ask("Какие услуги предоставляет ТПП?", "services")
+            assert isinstance(response, dict)
+            assert "response" in response
+            assert "confidence" in response
+            assert "sources" in response
+
+            # Should find the test data (with proper similarity scoring)
+            assert response["confidence"] >= 0.0, f"Confidence should be >= 0, got {response['confidence']}"
+            assert len(response["sources"]) > 0, "Should have sources"
 
     def test_rag_no_results(self):
         """Test RAG when no relevant data found"""
         rag = RAGSystem()
 
         # Query that should not match anything (random characters)
-        response = rag.ask("xyz123randomquerytest", "services")
+        # Mock API call to avoid external dependencies
+        with patch('rag.requests.post') as mock_post:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                'choices': [{'message': {'content': 'Не найдено достаточно информации'}}]
+            }
+            mock_post.return_value = mock_response
 
-        # In a real system, even random queries might get some similarity scores
-        # So we just check that it returns a proper response structure
-        assert isinstance(response, dict)
-        assert "response" in response
-        assert "confidence" in response
-        assert "sources" in response
-        assert isinstance(response["response"], str)
+            response = rag.ask("xyz123randomquerytest", "services")
+
+            # In a real system, even random queries might get some similarity scores
+            # So we just check that it returns a proper response structure
+            assert isinstance(response, dict)
+            assert "response" in response
+            assert "confidence" in response
+            assert "sources" in response
+            assert isinstance(response["response"], str)
 
     def test_rag_search_with_real_data(self):
         """Test RAG search with real parsed data"""
