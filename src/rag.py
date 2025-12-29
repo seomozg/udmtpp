@@ -55,6 +55,13 @@ class RAGSystem:
         clone.confidence_threshold = confidence_threshold if confidence_threshold is not None else self.confidence_threshold
         clone.system_prompt = self.system_prompt
         clone.initialized = True
+        # Copy methods
+        clone.search_context = self.search_context
+        clone.generate_response = self.generate_response
+        clone.generate_response_stream = self.generate_response_stream
+        clone.expand_query = self.expand_query
+        clone.ask = self.ask
+        clone.ask_stream = self.ask_stream
         return clone
 
     def search_context(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -213,12 +220,59 @@ class RAGSystem:
             logger.error(f"Error in streaming response: {e}")
             yield f"\n\nПроизошла ошибка при обработке запроса: {str(e)}"
 
+    def expand_query(self, query: str) -> str:
+        """Expand query with synonyms and related terms"""
+        try:
+            prompt = f"""Расширь запрос, добавив синонимы и связанные термины.
+Исходный запрос: "{query}"
+
+Верни расширенный запрос на русском языке, который будет более эффективен для поиска.
+Добавь ключевые слова, синонимы, связанные понятия.
+
+Пример:
+Исходный: "услуги ТПП"
+Расширенный: "услуги ТПП поддержка бизнеса консультации предпринимателей содействие развитию"
+
+Верни только расширенный запрос, без объяснений."""
+
+            response = requests.post(
+                f"{self.deepseek_base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.deepseek_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.2,
+                    "max_tokens": 100
+                },
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                expanded = result['choices'][0]['message']['content'].strip()
+                logger.info(f"Query expanded: '{query}' -> '{expanded}'")
+                return expanded
+            else:
+                logger.warning("Query expansion failed, using original")
+                return query
+
+        except Exception as e:
+            logger.warning(f"Query expansion error: {e}, using original")
+            return query
+
     def ask(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None) -> Dict[str, Any]:
         """Main method to ask questions"""
         logger.info(f"Processing query: {query} with n_results={n_results}")
 
+        # Expand query for better search
+        expanded_query = self.expand_query(query)
+        search_query = expanded_query if len(expanded_query.split()) > len(query.split()) else query
+
         # Search context
-        search_result = self.search_context(query, collection_name, n_results=n_results, collections_filter=collections_filter)
+        search_result = self.search_context(search_query, collection_name, n_results=n_results, collections_filter=collections_filter)
 
         # Generate response
         response = self.generate_response(query, search_result["context"], search_result["confidence"])
@@ -234,8 +288,12 @@ class RAGSystem:
         """Main method to ask questions with streaming response"""
         logger.info(f"Processing streaming query: {query} with n_results={n_results}")
 
+        # Expand query for better search
+        expanded_query = self.expand_query(query)
+        search_query = expanded_query if len(expanded_query.split()) > len(query.split()) else query
+
         # Search context
-        search_result = self.search_context(query, collection_name, n_results=n_results, collections_filter=collections_filter)
+        search_result = self.search_context(search_query, collection_name, n_results=n_results, collections_filter=collections_filter)
 
         # Yield metadata first
         yield {
