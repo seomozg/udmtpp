@@ -185,7 +185,34 @@ async def upload_file(
     try:
         # Read file content
         content = await file.read()
-        text = content.decode('utf-8')
+
+        # Extract text based on file type
+        filename = (file.filename or "").lower()
+        if filename.endswith('.pdf'):
+            # PDF file processing
+            from PyPDF2 import PdfReader
+            from io import BytesIO
+
+            pdf_stream = BytesIO(content)
+            pdf_reader = PdfReader(pdf_stream)
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
+
+        elif filename.endswith(('.doc', '.docx')):
+            # DOC/DOCX file processing
+            from docx import Document
+            from io import BytesIO
+
+            doc_stream = BytesIO(content)
+            doc = Document(doc_stream)
+            text = ""
+            for paragraph in doc.paragraphs:
+                text += paragraph.text + "\n"
+
+        else:
+            # Plain text file
+            text = content.decode('utf-8')
 
         # Chunk and embed
         from utils import chunk_text

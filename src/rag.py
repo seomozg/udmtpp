@@ -106,7 +106,7 @@ class RAGSystem:
             "confidence": confidence,
             "sources": [
                 {
-                    "url": r['payload']['url'],
+                    "url": r['payload'].get('url', 'N/A'),
                     "score": r['score'],
                     "category": r['payload'].get('category', 'unknown')
                 }
