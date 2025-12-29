@@ -12,7 +12,7 @@ import logging
 # Add src to path for imports
 sys.path.insert(0, os.path.dirname(__file__))
 
-from utils import get_env_var, chunk_text
+from utils import get_env_var, adaptive_chunk_text
 from embed import EmbeddingModel
 
 # Import ChromaDB for compatibility
@@ -166,7 +166,7 @@ class SiteParser:
             print(f"   📝 Извлечено {text_length} символов текста")
 
             # Chunk text
-            chunks = chunk_text(text)
+            chunks = adaptive_chunk_text(text)
             print(f"   ✂️  Разбито на {len(chunks)} чанков")
 
             # Categorize

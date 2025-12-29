@@ -215,12 +215,12 @@ async def upload_file(
             text = content.decode('utf-8')
 
         # Chunk and embed
-        from utils import chunk_text
+        from utils import adaptive_chunk_text
         from embed import EmbeddingModel
         import uuid
 
         embedder = EmbeddingModel()
-        chunks = chunk_text(text)
+        chunks = adaptive_chunk_text(text)
         embeddings = embedder.encode(chunks)
 
         # Create ChromaDB compatible points
@@ -348,12 +348,12 @@ async def rebuild_from_cache_api():
                 print(f"   🏷️  AI categorized as: {category}")
 
                 # Chunk and embed
-                from utils import chunk_text
+                from utils import adaptive_chunk_text
                 from embed import EmbeddingModel
                 import uuid
 
                 embedder = EmbeddingModel()
-                chunks = chunk_text(text)
+                chunks = adaptive_chunk_text(text)
                 embeddings = embedder.encode(chunks)
 
                 # Create points
