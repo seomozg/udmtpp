@@ -14,6 +14,10 @@ if current_dir not in sys.path:
 from utils import get_env_var, calculate_confidence
 from vector_db import ChromaDB
 from embed import EmbeddingModel
+from rank_bm25 import BM25Okapi
+import nltk
+from nltk.tokenize import word_tokenize
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +37,11 @@ class RAGSystem:
             self.deepseek_base_url = get_env_var("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
             self.top_k = int(get_env_var("TOP_K", "5"))
             self.confidence_threshold = float(get_env_var("CONFIDENCE_THRESHOLD", "0.7"))
+
+            # Initialize BM25 indexes for hybrid search
+            self.bm25_indexes = {}
+            self.document_texts = {}
+            self._build_bm25_indexes()
 
             self.system_prompt = """
 Ты — ассистент ТПП УР.
@@ -55,23 +64,60 @@ class RAGSystem:
         clone.confidence_threshold = confidence_threshold if confidence_threshold is not None else self.confidence_threshold
         clone.system_prompt = self.system_prompt
         clone.initialized = True
-        # Copy methods
+        # Copy methods and data
         clone.search_context = self.search_context
         clone.generate_response = self.generate_response
         clone.generate_response_stream = self.generate_response_stream
         clone.expand_query = self.expand_query
         clone.ask = self.ask
         clone.ask_stream = self.ask_stream
+        clone._build_bm25_indexes = self._build_bm25_indexes
+        clone.bm25_indexes = self.bm25_indexes
+        clone.document_texts = self.document_texts
         return clone
 
-    def search_context(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None) -> Dict[str, Any]:
-        """Search for relevant context"""
-        logger.info(f"Searching for query: '{query}' in collection: {collection_name}, n_results: {n_results}")
+    def _build_bm25_indexes(self):
+        """Build BM25 indexes for all collections"""
+        try:
+            # Download NLTK data if needed
+            try:
+                nltk.data.find('tokenizers/punkt')
+            except LookupError:
+                nltk.download('punkt', quiet=True)
 
-        # Use same encoding method as documents for consistency
-        query_embeddings = self.embedder.encode([query])
-        query_embedding = query_embeddings[0] if query_embeddings else []
-        logger.info(f"Query embedding shape: {len(query_embedding)}")
+            for collection_name in self.chroma_db.collection_configs.keys():
+                try:
+                    # Get all documents from collection
+                    documents = self.chroma_db.get_collection_documents(collection_name, limit=10000)
+                    if documents:
+                        # Extract texts and tokenize
+                        texts = [doc['text'] for doc in documents]
+                        tokenized_texts = []
+
+                        for text in texts:
+                            # Simple tokenization for Russian text
+                            tokens = re.findall(r'\b\w+\b', text.lower())
+                            tokenized_texts.append(tokens)
+
+                        # Build BM25 index
+                        if tokenized_texts:
+                            self.bm25_indexes[collection_name] = BM25Okapi(tokenized_texts)
+                            self.document_texts[collection_name] = documents
+                            logger.info(f"Built BM25 index for {collection_name} with {len(tokenized_texts)} documents")
+                        else:
+                            logger.warning(f"No documents found for {collection_name}")
+                    else:
+                        logger.warning(f"No documents in collection {collection_name}")
+
+                except Exception as e:
+                    logger.error(f"Error building BM25 index for {collection_name}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error building BM25 indexes: {e}")
+
+    def hybrid_search(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """Hybrid search combining semantic and keyword search"""
+        logger.info(f"Hybrid search for query: '{query}'")
 
         if collection_name:
             collections = [collection_name]
@@ -81,24 +127,102 @@ class RAGSystem:
             collections = list(self.chroma_db.collection_configs.keys())
 
         all_results = []
+
         for coll in collections:
             try:
-                logger.info(f"Searching in collection '{coll}'")
-                # Use ChromaDB search method
-                results = self.chroma_db.search(coll, query_embedding, n_results)
-                logger.info(f"Found {len(results)} results in {coll}")
-                all_results.extend(results)
+                # Semantic search
+                query_embedding = self.embedder.encode([query])[0]
+                semantic_results = self.chroma_db.search(coll, query_embedding, n_results * 2)  # Get more for reranking
+
+                # Keyword search with BM25
+                keyword_results = []
+                if coll in self.bm25_indexes and coll in self.document_texts:
+                    bm25 = self.bm25_indexes[coll]
+                    documents = self.document_texts[coll]
+
+                    # Tokenize query
+                    query_tokens = re.findall(r'\b\w+\b', query.lower())
+
+                    if query_tokens:
+                        # Get BM25 scores
+                        bm25_scores = bm25.get_scores(query_tokens)
+
+                        # Create keyword results
+                        for i, score in enumerate(bm25_scores):
+                            if score > 0:
+                                doc = documents[i]
+                                keyword_results.append({
+                                    'id': f"bm25_{i}",
+                                    'score': score / 10.0,  # Normalize BM25 score to 0-1 range
+                                    'payload': {
+                                        'text': doc['text'],
+                                        'url': doc.get('url', 'N/A'),
+                                        'category': coll,
+                                        'filename': doc.get('filename', ''),
+                                        'chunk_index': doc.get('chunk_index', 0)
+                                    }
+                                })
+
+                        # Sort by BM25 score and take top
+                        keyword_results.sort(key=lambda x: x['score'], reverse=True)
+                        keyword_results = keyword_results[:n_results]
+
+                # Combine results with weighted scoring
+                combined_results = []
+                semantic_weight = 0.7
+                keyword_weight = 0.3
+
+                # Create lookup for semantic results
+                semantic_lookup = {r['payload']['text'][:100]: r for r in semantic_results}
+
+                # Process keyword results and combine with semantic
+                for kw_result in keyword_results[:n_results//2]:  # Take half from keyword
+                    text_key = kw_result['payload']['text'][:100]
+                    if text_key in semantic_lookup:
+                        # Combine scores if same document
+                        sem_result = semantic_lookup[text_key]
+                        combined_score = (sem_result['score'] * semantic_weight +
+                                        kw_result['score'] * keyword_weight)
+                        combined_results.append({
+                            'id': sem_result['id'],
+                            'score': combined_score,
+                            'payload': sem_result['payload']
+                        })
+                    else:
+                        # Only keyword result
+                        combined_results.append({
+                            'id': kw_result['id'],
+                            'score': kw_result['score'] * keyword_weight,
+                            'payload': kw_result['payload']
+                        })
+
+                # Add remaining semantic results
+                for sem_result in semantic_results:
+                    text_key = sem_result['payload']['text'][:100]
+                    if text_key not in [r['payload']['text'][:100] for r in combined_results]:
+                        combined_results.append({
+                            'id': sem_result['id'],
+                            'score': sem_result['score'] * semantic_weight,
+                            'payload': sem_result['payload']
+                        })
+
+                all_results.extend(combined_results)
 
             except Exception as e:
-                logger.error(f"Error searching in {coll}: {e}")
+                logger.error(f"Error in hybrid search for {coll}: {e}")
 
-        logger.info(f"Total results found: {len(all_results)}")
-
-        # Sort by score and take top results
+        # Sort all results by combined score
         all_results.sort(key=lambda x: x['score'], reverse=True)
-        top_results = all_results[:n_results]
+        return all_results[:n_results]
 
-        logger.info(f"Top {len(top_results)} results selected")
+    def search_context(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Search for relevant context using hybrid search"""
+        logger.info(f"Searching for query: '{query}' in collection: {collection_name}, n_results: {n_results}")
+
+        # Use hybrid search instead of pure semantic search
+        top_results = self.hybrid_search(query, collection_name, n_results, collections_filter)
+
+        logger.info(f"Hybrid search returned {len(top_results)} results")
 
         # Calculate confidence
         scores = [r['score'] for r in top_results]
