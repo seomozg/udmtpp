@@ -119,8 +119,29 @@ def semantic_chunk_text(text: str, chunk_size: int, overlap: int) -> List[str]:
 
     return chunks
 
+def convert_numpy_types(obj: Any) -> Any:
+    """Convert numpy types to Python native types for JSON serialization"""
+    try:
+        import numpy as np
+
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif hasattr(obj, 'dtype') and obj.dtype in (np.float32, np.float64):
+            return float(obj)
+        elif hasattr(obj, 'dtype') and obj.dtype in (np.int32, np.int64):
+            return int(obj)
+        elif isinstance(obj, dict):
+            return {k: convert_numpy_types(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_numpy_types(item) for item in obj]
+        else:
+            return obj
+    except ImportError:
+        # If numpy is not available, return as-is
+        return obj
+
 def calculate_confidence(scores: List[float]) -> float:
     """Calculate average confidence from similarity scores"""
     if not scores:
         return 0.0
-    return sum(scores) / len(scores)
+    return convert_numpy_types(sum(scores) / len(scores))

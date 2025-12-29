@@ -270,13 +270,16 @@ class RAGSystem:
 
         context_texts = [r['payload']['text'] for r in top_results]
 
+        # Convert all numpy types to Python native types for JSON serialization
+        from utils import convert_numpy_types
+
         return {
             "context": "\n\n".join(context_texts),
             "confidence": confidence,
             "sources": [
                 {
                     "url": r['payload'].get('url', 'N/A'),
-                    "score": r['score'],
+                    "score": convert_numpy_types(r['score']),
                     "category": r['payload'].get('category', 'unknown')
                 }
                 for r in top_results
