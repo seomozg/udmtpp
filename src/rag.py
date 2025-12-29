@@ -18,6 +18,7 @@ from rank_bm25 import BM25Okapi
 import nltk
 from nltk.tokenize import word_tokenize
 import re
+from sentence_transformers import CrossEncoder
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,14 @@ class RAGSystem:
             self.bm25_indexes = {}
             self.document_texts = {}
             self._build_bm25_indexes()
+
+            # Initialize cross-encoder for reranking
+            try:
+                self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+                logger.info("Cross-encoder model loaded for reranking")
+            except Exception as e:
+                logger.warning(f"Could not load cross-encoder: {e}, reranking disabled")
+                self.cross_encoder = None
 
             self.system_prompt = """
 Ты — ассистент ТПП УР.
@@ -211,7 +220,36 @@ class RAGSystem:
             except Exception as e:
                 logger.error(f"Error in hybrid search for {coll}: {e}")
 
-        # Sort all results by combined score
+        # Rerank top results with cross-encoder if available
+        if self.cross_encoder and len(all_results) > n_results:
+            try:
+                top_candidates = all_results[:min(len(all_results), n_results * 2)]  # Get more for reranking
+                if len(top_candidates) > 1:
+                    # Prepare pairs for cross-encoder
+                    pairs = [[query, result['payload']['text']] for result in top_candidates]
+
+                    # Get cross-encoder scores
+                    ce_scores = self.cross_encoder.predict(pairs)
+
+                    # Update scores with cross-encoder results
+                    for i, result in enumerate(top_candidates):
+                        # Combine original score with cross-encoder score
+                        original_score = result['score']
+                        ce_score = ce_scores[i]
+                        # Normalize cross-encoder score (usually -10 to 10) to 0-1
+                        normalized_ce = (ce_score + 10) / 20.0
+                        # Weighted combination
+                        result['score'] = 0.7 * original_score + 0.3 * normalized_ce
+
+                    # Re-sort by updated scores
+                    top_candidates.sort(key=lambda x: x['score'], reverse=True)
+                    all_results = top_candidates
+
+                logger.info(f"Reranked {len(top_candidates)} results with cross-encoder")
+            except Exception as e:
+                logger.warning(f"Cross-encoder reranking failed: {e}, using original ranking")
+
+        # Sort all results by final score
         all_results.sort(key=lambda x: x['score'], reverse=True)
         return all_results[:n_results]
 
