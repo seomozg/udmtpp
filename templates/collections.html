@@ -136,14 +136,14 @@
             modal.show();
 
             // Load documents from API
-            fetch(`/api/collections/${collectionId}/documents?limit=20`)
+            fetch(`/api/collections/${collectionId}/documents?limit=1000`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.documents && data.documents.length > 0) {
                         let html = `
                             <div class="mb-3">
                                 <h6>Найдено документов: ${data.total_count}</h6>
-                                <small class="text-muted">Показаны первые 20 документов</small>
+                                <small class="text-muted">Показаны все документы</small>
                             </div>
                             <div class="list-group" style="max-height: 400px; overflow-y: auto;">
                         `;
@@ -176,7 +176,6 @@
 
                         html += `
                             </div>
-                            ${data.total_count > 20 ? '<div class="mt-2"><small class="text-muted">Используйте API для просмотра всех документов</small></div>' : ''}
                         `;
 
                         modalContent.innerHTML = html;
