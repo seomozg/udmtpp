@@ -24,37 +24,37 @@ DEFAULT_N_RESULTS = 5
 CONFIDENCE_THRESHOLD = 0.4
 MAX_TOKENS = 1000
 
-# Collection configurations
+# Collection configurations (обновлено на основе анализа sitemap.xml)
 COLLECTION_CONFIGS = {
     "719": {
         "name": "Консультации по 719-ПП / Акт СТ",
-        "url_keywords": ["719"],
-        "text_keywords": ["реестр", "промышленной продукции", "акт ст", "постановление"]
+        "url_keywords": ["719", "akt-st", "promyshlennoy-produktsii"],
+        "text_keywords": ["реестр", "промышленной продукции", "акт ст", "постановление", "сертификат", "продукции"]
     },
     "support": {
         "name": "Меры поддержки бизнеса",
-        "url_keywords": [],
+        "url_keywords": ["podderzhka", "grant", "subsidii", "lgoty"],
         "text_keywords": ["субсидии", "гранты", "льготы", "поддержка бизнеса", "финансовая поддержка", "государственная поддержка"]
     },
     "services": {
         "name": "Услуги ТПП",
-        "url_keywords": ["uslugi", "ekspertiza", "oczenka", "sertifikaty", "yuridicheskie-uslugi", "ocenka-imushhestva"],
-        "text_keywords": ["услуги тпп", "экспертиза", "оценка", "сертификация", "юридические услуги"]
+        "url_keywords": ["uslugi", "ekspertiza", "oczenka", "sertifikaty", "yuridicheskie-uslugi", "ocenka-imushhestva", "kursyi", "investitsionnyj-konsalting"],
+        "text_keywords": ["услуги тпп", "экспертиза", "оценка", "сертификация", "юридические услуги", "консультации", "услуги"]
     },
     "membership": {
         "name": "Членство в ТПП",
-        "url_keywords": ["членство", "vstupit", "utpp-chleny"],
-        "text_keywords": ["членство"]
+        "url_keywords": ["членство", "vstupit", "utpp-chleny", "kak-stat-chlenom-utpp"],
+        "text_keywords": ["членство", "вступление", "член тпп", "присоединение"]
     },
     "events": {
         "name": "Мероприятия, обучение",
-        "url_keywords": ["meropriyat", "seminar", "konferenc", "forum"],
-        "text_keywords": ["мероприятие", "конференция", "форум"]
+        "url_keywords": ["meropriyat", "seminar", "konferenc", "forum", "plan-meropriyatij", "videokonferenciyu", "eksportnyix-seminarax"],
+        "text_keywords": ["мероприятие", "конференция", "форум", "семинар", "выставка", "круглый стол"]
     },
     "cooperation": {
         "name": "Поиск партнёров / коопераций",
-        "url_keywords": ["kommercheskoe-predlozhenie", "partner", "kooperacziya"],
-        "text_keywords": ["партнеры", "сотрудничество", "деловое партнерство"]
+        "url_keywords": ["kommercheskoe-predlozhenie", "partner", "kooperacziya", "sotrudnichestvo"],
+        "text_keywords": ["партнеры", "сотрудничество", "деловое партнерство", "кооперация", "альянс"]
     },
     "site": {
         "name": "Общий контент сайта",
