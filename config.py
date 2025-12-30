@@ -24,38 +24,58 @@ DEFAULT_N_RESULTS = 5
 CONFIDENCE_THRESHOLD = 0.4
 MAX_TOKENS = 1000
 
-# Collection configurations
+# Collection configurations (обновлено на основе анализа sitemap.xml)
 COLLECTION_CONFIGS = {
-    "719": {
-        "name": "Консультации по 719-ПП / Акт СТ",
-        "url_keywords": ["719"],
-        "text_keywords": ["реестр", "промышленной продукции", "акт ст", "постановление"]
-    },
-    "support": {
-        "name": "Меры поддержки бизнеса",
-        "url_keywords": [],
-        "text_keywords": ["субсидии", "гранты", "льготы", "поддержка бизнеса", "финансовая поддержка", "государственная поддержка"]
-    },
     "services": {
         "name": "Услуги ТПП",
         "description": "Услуги ТПП",
-        "url_keywords": ["uslugi", "ekspertiza", "oczenka", "sertifikaty", "yuridicheskie-uslugi", "ocenka-imushhestva"],
-        "text_keywords": ["услуги тпп", "экспертиза", "оценка", "сертификация", "юридические услуги"]
+        "url_keywords": ["uslugi", "ekspertiza", "oczenka", "sertifikaty", "yuridicheskie-uslugi", "ocenka-imushhestva", "eksperty-i-otsenshhiki"],
+        "text_keywords": ["услуги тпп", "экспертиза", "оценка", "сертификация", "юридические услуги", "консультации", "услуги"]
+    },
+    "committees": {
+        "name": "Комитеты и комиссии ТПП УР",
+        "url_keywords": ["komitetyi-tpp-ur"],
+        "text_keywords": ["комитет", "комиссия", "экспертный совет", "рабочая группа"]
     },
     "membership": {
         "name": "Членство в ТПП",
-        "url_keywords": ["членство", "vstupit", "utpp-chleny"],
-        "text_keywords": ["членство"]
+        "url_keywords": ["членство", "vstupit", "utpp-chleny", "kak-stat-chlenom-utpp"],
+        "text_keywords": ["членство", "вступление", "член тпп", "присоединение"]
+    },
+    "education": {
+        "name": "Образовательная деятельность",
+        "url_keywords": ["svedeniya-ob-obrazovatelnoj-organizaczii", "obrazovanie"],
+        "text_keywords": ["образование", "обучение", "курсы", "семинары", "тренинги", "повышение квалификации"]
     },
     "events": {
-        "name": "Мероприятия, обучение",
-        "url_keywords": ["meropriyat", "seminar", "konferenc", "forum"],
-        "text_keywords": ["мероприятие", "конференция", "форум"]
+        "name": "Мероприятия и форумы",
+        "url_keywords": ["meropriyat", "seminar", "konferenc", "forum", "vef"],
+        "text_keywords": ["мероприятие", "конференция", "форум", "выставка", "круглый стол", "семинар"]
     },
     "cooperation": {
-        "name": "Поиск партнёров / коопераций",
-        "url_keywords": ["kommercheskoe-predlozhenie", "partner", "kooperacziya"],
-        "text_keywords": ["партнеры", "сотрудничество", "деловое партнерство"]
+        "name": "Деловое сотрудничество",
+        "url_keywords": ["kommercheskoe-predlozhenie", "partner", "kooperacziya", "sotrudnichestvo"],
+        "text_keywords": ["партнеры", "сотрудничество", "деловое партнерство", "кооперация", "альянс"]
+    },
+    "support": {
+        "name": "Меры поддержки бизнеса",
+        "url_keywords": ["podderzhka", "grant", "subsidii"],
+        "text_keywords": ["субсидии", "гранты", "льготы", "поддержка бизнеса", "финансовая поддержка", "государственная поддержка"]
+    },
+    "legal": {
+        "name": "Юридические услуги",
+        "url_keywords": ["yurid-konsultatsii", "nalogovoe-pravo", "antimonopolnoe-pravo"],
+        "text_keywords": ["юридические услуги", "правовое", "законодательство", "нормативные акты", "консультации"]
+    },
+    "news": {
+        "name": "Новости и пресс-релизы",
+        "url_keywords": ["news"],
+        "text_keywords": ["новости", "пресс-релиз", "сообщение", "анонс"]
+    },
+    "about": {
+        "name": "О ТПП УР",
+        "url_keywords": ["o-soyuze-udmurtskaya-utpp", "ob-organizatsii", "respublika-udmurtiya"],
+        "text_keywords": ["торгово-промышленная палата", "удмуртская республика", "о союзе", "история"]
     },
     "site": {
         "name": "Общий контент сайта",
@@ -65,9 +85,9 @@ COLLECTION_CONFIGS = {
 }
 
 
-# Categorization prompt template (universal for single content or sitemap)
+# Categorization prompt template (обновлено для новых категорий)
 CATEGORIZATION_PROMPT = """
-Определи наиболее подходящую категорию для контента сайта ТПП.
+Определи наиболее подходящую категорию для контента сайта ТПП УР.
 
 {input_section}
 
@@ -75,10 +95,17 @@ CATEGORIZATION_PROMPT = """
 {categories}
 
 ВАЖНЫЕ УТОЧНЕНИЯ:
-- Курсы обучения, тренинги, семинары по повышению квалификации → services (услуги ТПП)
-- Мероприятия, конференции, выставки, форумы → events
-- Если контент описывает услуги ТПП (экспертиза, оценка, сертификация) → services
-- Если контент о вступлении в ТПП → membership
+- Услуги ТПП (экспертиза, оценка, сертификация, консультации) → services
+- Комитеты и комиссии ТПП УР → committees
+- Членство в ТПП, вступление → membership
+- Образовательная деятельность, курсы, семинары → education
+- Мероприятия, конференции, форумы, выставки → events
+- Деловое сотрудничество, партнеры, кооперация → cooperation
+- Меры поддержки бизнеса, субсидии, гранты → support
+- Юридические услуги, правовые консультации → legal
+- Новости, пресс-релизы, анонсы → news
+- Информация о ТПП УР, республике, истории → about
+- Общий контент сайта → site
 
 Проанализируй URL и содержание текста. Определи, к какой категории этот контент относится больше всего.
 
@@ -91,7 +118,7 @@ CATEGORIZATION_PROMPT = """
   }}
 }}
 
-Если одиночный URL с текстом, верни только название категории (одно слово из списка: 719, support, services, membership, events, cooperation, site).
+Если одиночный URL с текстом, верни только название категории (одно слово из списка: services, committees, membership, education, events, cooperation, support, legal, news, about, site).
 """
 
 # RAG answer generation prompt template
