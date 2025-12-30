@@ -43,7 +43,7 @@ class TestFastAPIApp:
         assert "collections" in data
         assert isinstance(data["collections"], dict)
 
-    @patch('app.rag_system.ask')
+    @patch('api_routes.rag_system.ask')
     def test_chat_api_success(self, mock_ask):
         """Test successful chat API call"""
         mock_ask.return_value = {
@@ -69,13 +69,19 @@ class TestFastAPIApp:
         response = client.post("/api/chat", data={})
         assert response.status_code == 422  # Validation error
 
-    @patch('app.chroma_db')
+    @patch('api_routes.chroma_db')
     def test_parse_site_api(self, mock_vector_db):
         """Test parse site API"""
         # Mock the parser and vector db
-        with patch('app.SiteParser') as mock_parser_class:
+        with patch('api_routes.SiteParser') as mock_parser_class:
             mock_parser = MagicMock()
             mock_parser.parse_sitemap.return_value = ["http://test1.com", "http://test2.com"]
+            mock_parser.process_urls_with_ai_plan.return_value = {
+                "processed_urls": 2,
+                "total_points": 10,
+                "points": [],
+                "ai_mappings": {}
+            }
             mock_parser_class.return_value = mock_parser
 
             mock_vector_db.get_collection_info.return_value = {
@@ -96,9 +102,9 @@ class TestFastAPIApp:
         files = {"file": ("test.txt", test_file_content, "text/plain")}
         data = {"category": "services"}
 
-        with patch('app.chroma_db') as mock_vector_db:
-            with patch('embed.EmbeddingModel') as mock_embed_class:
-                with patch('utils.chunk_text', return_value=["chunk1", "chunk2"]):
+        with patch('api_routes.chroma_db') as mock_vector_db:
+            with patch('api_routes.EmbeddingModel') as mock_embed_class:
+                with patch('api_routes.semantic_chunk_text', return_value=["chunk1", "chunk2"]):
                     mock_embed = MagicMock()
                     mock_embed.encode.return_value = [[0.1] * 768, [0.2] * 768]
                     mock_embed_class.return_value = mock_embed

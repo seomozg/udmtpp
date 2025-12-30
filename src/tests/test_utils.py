@@ -31,7 +31,9 @@ class TestUtils:
         scores = [0.8, 0.9, 0.7]
         confidence = calculate_confidence(scores)
 
-        assert abs(confidence - 0.8) < 0.001  # Average of scores (with floating point tolerance)
+        # Expected: 50% * 0.9 + 30% * 0.8 + 20% * 0.7 = 0.83
+        expected = 0.5 * 0.9 + 0.3 * 0.8 + 0.2 * 0.7
+        assert abs(confidence - expected) < 0.001  # Weighted average calculation
 
     def test_calculate_confidence_empty(self):
         """Test confidence calculation with empty list"""

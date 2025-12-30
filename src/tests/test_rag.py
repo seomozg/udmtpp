@@ -1,201 +1,220 @@
+"""
+Tests for RAG (Retrieval-Augmented Generation) system
+"""
+
 import pytest
-from unittest.mock import patch, MagicMock
 import sys
 import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-# Add src to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from rag_system import RAGSystem
+from unittest.mock import patch, MagicMock
 
-from rag import RAGSystem
-from vector_db import ChromaDB
-from embed import EmbeddingModel
 
 class TestRAGSystem:
+    """Test RAG system functionality"""
+
     @pytest.fixture
     def mock_chroma_db(self):
         """Mock ChromaDB for testing"""
-        mock_db = MagicMock(spec=ChromaDB)
+        mock_db = MagicMock()
         mock_db.collection_configs = {
             "test": "Test collection"
         }
-        mock_db.get_collection_documents.return_value = [
-            {"text": "Это тестовый документ для поиска", "url": "test.com"}
-        ]
         mock_db.search.return_value = [
-            {"id": "1", "score": 0.8, "payload": {"text": "test content", "url": "test.com"}}
+            {"id": "1", "score": 0.8, "payload": {"text": "test content", "url": "test.com", "category": "test"}}
         ]
         return mock_db
 
     @pytest.fixture
     def mock_embedder(self):
         """Mock EmbeddingModel for testing"""
-        mock_emb = MagicMock(spec=EmbeddingModel)
+        mock_emb = MagicMock()
         mock_emb.encode.return_value = [[0.1, 0.2, 0.3]]
         return mock_emb
 
-    @patch('rag.ChromaDB')
-    @patch('rag.EmbeddingModel')
+    @patch('rag_system.ChromaDB')
+    @patch('rag_system.EmbeddingModel')
     def test_query_expansion(self, mock_embed_class, mock_db_class, mock_chroma_db, mock_embedder):
         """Test query expansion functionality"""
         mock_db_class.return_value = mock_chroma_db
         mock_embed_class.return_value = mock_embedder
 
-        # Mock the singleton pattern
-        with patch.object(RAGSystem, '_instance', None):
-            rag = RAGSystem()
+        rag = RAGSystem()
 
-        # Mock requests for API call
-        with patch('rag.requests.post') as mock_post:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
-                'choices': [{'message': {'content': 'расширенный запрос с синонимами'}}]
-            }
-            mock_post.return_value = mock_response
+        result = rag.expand_query("мероприятия")
 
-            result = rag.expand_query("тестовый запрос")
+        # Should return expanded query
+        assert isinstance(result, str)
+        assert "мероприятия" in result
+        assert "семинары" in result  # From expansion templates
 
-            # Should return expanded query
-            assert "расширенный запрос с синонимами" in result
-            mock_post.assert_called_once()
-
-    @patch('rag.ChromaDB')
-    @patch('rag.EmbeddingModel')
-    def test_query_expansion_fallback(self, mock_embed_class, mock_db_class, mock_chroma_db, mock_embedder):
-        """Test query expansion fallback on API failure"""
+    @patch('rag_system.ChromaDB')
+    @patch('rag_system.EmbeddingModel')
+    def test_search_success(self, mock_embed_class, mock_db_class, mock_chroma_db, mock_embedder):
+        """Test successful search"""
         mock_db_class.return_value = mock_chroma_db
         mock_embed_class.return_value = mock_embedder
 
-        with patch.object(RAGSystem, '_instance', None):
-            rag = RAGSystem()
+        rag = RAGSystem()
 
-        # Mock failed API call
-        with patch('rag.requests.post') as mock_post:
-            mock_post.side_effect = Exception("API Error")
+        result = rag.search("test query", "test", 5)
 
-            result = rag.expand_query("тестовый запрос")
+        # Should return search results
+        assert isinstance(result, dict)
+        assert "query" in result
+        assert "results" in result
+        assert "confidence" in result
+        assert result["confidence"] > 0
 
-            # Should return original query
-            assert result == "тестовый запрос"
-
-    @patch('rag.ChromaDB')
-    @patch('rag.EmbeddingModel')
-    def test_hybrid_search(self, mock_embed_class, mock_db_class, mock_chroma_db, mock_embedder):
-        """Test hybrid search functionality"""
+    @patch('rag_system.ChromaDB')
+    @patch('rag_system.EmbeddingModel')
+    def test_search_empty_results(self, mock_embed_class, mock_db_class, mock_chroma_db, mock_embedder):
+        """Test search with no results"""
+        mock_chroma_db.search.return_value = []
         mock_db_class.return_value = mock_chroma_db
         mock_embed_class.return_value = mock_embedder
 
-        with patch.object(RAGSystem, '_instance', None):
-            rag = RAGSystem()
+        rag = RAGSystem()
 
-        # Mock BM25 index
-        rag.bm25_indexes = {
-            "test": MagicMock()
+        result = rag.search("test query", "test", 5)
+
+        # Should return empty results with confidence 0
+        assert isinstance(result, dict)
+        assert len(result["results"]) == 0
+        assert result["confidence"] == 0.0
+
+    @patch('rag_system.ChromaDB')
+    @patch('rag_system.EmbeddingModel')
+    @patch('rag_system.requests.post')
+    def test_ask_success(self, mock_post, mock_embed_class, mock_db_class, mock_chroma_db, mock_embedder):
+        """Test successful ask with AI response"""
+        mock_db_class.return_value = mock_chroma_db
+        mock_embed_class.return_value = mock_embedder
+
+        # Mock AI response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "Тестовый ответ от AI"}}]
         }
-        rag.document_texts = {
-            "test": [{"text": "test document", "url": "test.com"}]
-        }
+        mock_post.return_value = mock_response
 
-        # Mock BM25 scores
-        mock_bm25 = rag.bm25_indexes["test"]
-        mock_bm25.get_scores.return_value = [0.5]
+        rag = RAGSystem()
 
-        result = rag.hybrid_search("test query", "test", 5)
+        result = rag.ask("тестовый вопрос")
 
-        # Should return results
-        assert isinstance(result, list)
-        assert len(result) > 0
+        # Should return complete response
+        assert isinstance(result, dict)
+        assert "query" in result
+        assert "response" in result
+        assert "confidence" in result
+        assert "sources" in result
+        assert result["response"] == "Тестовый ответ от AI"
 
-        # Check that both semantic and keyword search were called
-        mock_chroma_db.search.assert_called()
-        mock_bm25.get_scores.assert_called()
-
-    @patch('rag.ChromaDB')
-    @patch('rag.EmbeddingModel')
-    def test_rerank_with_cross_encoder(self, mock_embed_class, mock_db_class, mock_chroma_db, mock_embedder):
-        """Test reranking with cross-encoder"""
+    @patch('rag_system.ChromaDB')
+    @patch('rag_system.EmbeddingModel')
+    def test_ask_low_confidence(self, mock_embed_class, mock_db_class, mock_chroma_db, mock_embedder):
+        """Test ask with low confidence (no AI call)"""
+        # Mock low confidence results
+        mock_chroma_db.search.return_value = [
+            {"id": "1", "score": 0.1, "payload": {"text": "low relevance", "url": "test.com", "category": "test"}}
+        ]
         mock_db_class.return_value = mock_chroma_db
         mock_embed_class.return_value = mock_embedder
 
-        with patch.object(RAGSystem, '_instance', None):
-            rag = RAGSystem()
+        rag = RAGSystem()
 
-        # Mock cross-encoder
-        mock_ce = MagicMock()
-        mock_ce.predict.return_value = [0.8, 0.6]  # Higher score for first result
-        rag.cross_encoder = mock_ce
+        result = rag.ask("тестовый вопрос")
 
-        # Setup BM25 for keyword search
-        rag.bm25_indexes = {"test": MagicMock()}
-        rag.document_texts = {"test": [{"text": "test document", "url": "test.com"}]}
+        # Should return low confidence response
+        assert isinstance(result, dict)
+        assert "response" in result
+        assert result["confidence"] < 0.5  # Low confidence
+        assert "информация отсутствует" in result["response"].lower()
 
-        mock_bm25 = rag.bm25_indexes["test"]
-        mock_bm25.get_scores.return_value = [0.5]
-
-        # Mock semantic search results (more than n_results to trigger reranking)
-        semantic_results = [
-            {"id": "1", "score": 0.7, "payload": {"text": "first result " * 10}},  # Long text
-            {"id": "2", "score": 0.8, "payload": {"text": "second result " * 10}}, # Long text
-            {"id": "3", "score": 0.6, "payload": {"text": "third result " * 10}},  # Long text
-            {"id": "4", "score": 0.9, "payload": {"text": "fourth result " * 10}}  # Long text
-        ]
-        mock_chroma_db.search.return_value = semantic_results
-
-        # Call hybrid search with n_results that triggers reranking
-        result = rag.hybrid_search("test query", "test", n_results=3)
-
-        # Cross-encoder should be called for reranking (since we have more results than n_results)
-        mock_ce.predict.assert_called()
-
-        # Results should be reranked and limited
-        assert len(result) == 3
-
-    @patch('rag.ChromaDB')
-    @patch('rag.EmbeddingModel')
-    def test_rerank_disabled_when_no_cross_encoder(self, mock_embed_class, mock_db_class, mock_chroma_db, mock_embedder):
-        """Test that reranking is skipped when cross-encoder is not available"""
+    @patch('rag_system.ChromaDB')
+    @patch('rag_system.EmbeddingModel')
+    @patch('rag_system.requests.post')
+    def test_ask_ai_error(self, mock_post, mock_embed_class, mock_db_class, mock_chroma_db, mock_embedder):
+        """Test ask with AI API error"""
         mock_db_class.return_value = mock_chroma_db
         mock_embed_class.return_value = mock_embedder
 
-        with patch.object(RAGSystem, '_instance', None):
-            rag = RAGSystem()
+        # Mock AI API error
+        mock_post.side_effect = Exception("API Error")
 
-        # No cross-encoder
-        rag.cross_encoder = None
+        rag = RAGSystem()
 
-        mock_results = [
-            {"id": "1", "score": 0.7, "payload": {"text": "first result"}}
+        result = rag.ask("тестовый вопрос")
+
+        # Should handle error gracefully
+        assert isinstance(result, dict)
+        assert "error" in result or "Ошибка" in result.get("response", "")
+
+    def test_calculate_confidence(self):
+        """Test confidence calculation"""
+        rag = RAGSystem()
+
+        # Test with results
+        results = [
+            {"score": 0.8},
+            {"score": 0.9},
+            {"score": 0.7}
+        ]
+        confidence = rag._calculate_confidence(results)
+        assert isinstance(confidence, float)
+        assert confidence > 0
+
+        # Test with empty results
+        confidence = rag._calculate_confidence([])
+        assert confidence == 0.0
+
+    def test_prepare_context(self):
+        """Test context preparation"""
+        rag = RAGSystem()
+
+        results = [
+            {"text": "test text 1", "url": "test1.com"},
+            {"text": "test text 2", "url": "test2.com"}
         ]
 
-        with patch.object(rag, 'hybrid_search', return_value=mock_results):
-            result = rag.hybrid_search("test", n_results=5)
+        context = rag._prepare_context(results)
 
-            # Results should be returned as-is
-            assert len(result) == 1
-            assert result[0]["score"] == 0.7
+        assert isinstance(context, str)
+        assert "test text 1" in context
+        assert "test text 2" in context
+        assert "test1.com" in context
+        assert "test2.com" in context
 
-    def test_clone_with_settings(self):
-        """Test RAGSystem cloning with custom settings"""
-        with patch.object(RAGSystem, '_instance', None):
-            rag = RAGSystem()
+    def test_extract_sources(self):
+        """Test source extraction"""
+        rag = RAGSystem()
 
-        # Mock components
-        rag.chroma_db = MagicMock()
-        rag.embedder = MagicMock()
-        rag.deepseek_api_key = "test_key"
+        results = [
+            {"url": "test1.com", "score": 0.8, "category": "test"},
+            {"url": "test2.com", "score": 0.9, "category": "test"}
+        ]
 
-        cloned = rag.clone_with_settings(confidence_threshold=0.8)
+        sources = rag._extract_sources(results)
 
-        # Should be different object
-        assert cloned is not rag
+        assert isinstance(sources, list)
+        assert len(sources) == 2
+        assert sources[0]["url"] == "test1.com"
+        assert sources[0]["score"] == 0.8
+        assert sources[1]["url"] == "test2.com"
+        assert sources[1]["score"] == 0.9
 
-        # Should share components
-        assert cloned.chroma_db is rag.chroma_db
-        assert cloned.embedder is rag.embedder
+    @patch('rag_system.ChromaDB')
+    def test_get_collection_info(self, mock_db_class):
+        """Test getting collection info"""
+        mock_db = MagicMock()
+        mock_db.get_collection_info.return_value = {"test": {"name": "test", "points_count": 10}}
+        mock_db_class.return_value = mock_db
 
-        # Should have custom settings
-        assert cloned.confidence_threshold == 0.8
+        rag = RAGSystem()
 
-        # Should have copied methods
-        assert hasattr(cloned, 'ask')
-        assert hasattr(cloned, 'ask_stream')
+        info = rag.get_collection_info()
+
+        assert isinstance(info, dict)
+        assert "test" in info

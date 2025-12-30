@@ -4,6 +4,8 @@ import logging
 import os
 import uuid
 
+from config import COLLECTION_CONFIGS, CHROMA_DB_DIR
+
 logger = logging.getLogger(__name__)
 
 class ChromaDB:
@@ -18,24 +20,16 @@ class ChromaDB:
 
     def __init__(self):
         if not hasattr(self, 'initialized'):
-            # Initialize persistent ChromaDB - use absolute path from script location
+            # Initialize persistent ChromaDB - use config path
             script_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.dirname(script_dir)  # Go up from src/ to project root
-            persist_dir = os.path.join(project_root, "chroma_db")
+            persist_dir = os.path.join(project_root, CHROMA_DB_DIR)
             os.makedirs(persist_dir, exist_ok=True)
             self.client = chromadb.PersistentClient(path=persist_dir)
             logger.info(f"Initialized ChromaDB with persistence at {persist_dir}")
 
-            # Collection configurations - following README.md naming
-            self.collection_configs = {
-                "719": "Консультации по 719-ПП / Акт СТ",
-                "support": "Меры поддержки бизнеса",
-                "services": "Услуги ТПП",
-                "membership": "Членство в ТПП",
-                "events": "Мероприятия, обучение",
-                "cooperation": "Поиск партнёров / коопераций",
-                "site": "Общий контент сайта"
-            }
+            # Collection configurations from config
+            self.collection_configs = {name: config["name"] for name, config in COLLECTION_CONFIGS.items()}
 
             # Initialize collections
             self.collections = {}
@@ -106,9 +100,9 @@ class ChromaDB:
         except Exception as e:
             logger.error(f"Error adding points to {collection_name}: {e}")
 
-    def search(self, collection_name: str, query_vector: List[float], limit: int = 5) -> List[Dict[str, Any]]:
+    def search(self, collection_name: str, query_vector: List[float], limit: int = 5, query_text: str = None) -> List[Dict[str, Any]]:
         """Search for similar vectors in ChromaDB"""
-        logger.info(f"Searching in {collection_name}, vector length: {len(query_vector)}")
+        logger.info(f"Searching in {collection_name}, vector length: {len(query_vector)}, query_text: {query_text}")
 
         if collection_name not in self.collections:
             logger.error(f"Collection {collection_name} not found")
@@ -117,6 +111,7 @@ class ChromaDB:
         collection = self.collections[collection_name]
 
         try:
+            # First try semantic search
             results = collection.query(
                 query_embeddings=[query_vector],
                 n_results=limit,
@@ -135,6 +130,61 @@ class ChromaDB:
                         "score": similarity_score,
                         "payload": results['metadatas'][0][i] if results['metadatas'] else {}
                     })
+
+            # Always try metadata search for exact text matches if we have query_text
+            if query_text:
+                logger.info(f"Low semantic scores, trying metadata search for: {query_text}")
+
+                # Search for documents containing the query in metadata
+                all_docs = collection.get(include=['metadatas', 'documents'], limit=1000)
+                metadata_matches = []
+
+                query_lower = query_text.lower()
+                documents_list = all_docs.get('documents', [])
+                metadatas_list = all_docs.get('metadatas', [])
+
+                for i, metadata in enumerate(metadatas_list):
+                    if metadata:
+                        url = metadata.get('url', '').lower()
+                        doc_text = documents_list[i] if i < len(documents_list) else ""
+                        doc_text = doc_text or ""
+                        doc_text_lower = doc_text.lower()
+
+                        score = 0.0
+                        match_type = "none"
+
+                        # Check if query_text is in URL (highest priority)
+                        if query_lower in url:
+                            score = 0.95
+                            match_type = "url_exact"
+                        # Check if query_text is in document text
+                        elif query_lower in doc_text_lower:
+                            score = 0.85
+                            match_type = "text_exact"
+
+                        if score > 0:
+                            metadata_matches.append({
+                                "id": all_docs['ids'][i],
+                                "score": score,
+                                "payload": metadata,
+                                "match_type": match_type
+                            })
+
+                if metadata_matches:
+                    logger.info(f"Found {len(metadata_matches)} metadata matches")
+                    # Add metadata matches to results
+                    formatted_results.extend(metadata_matches[:limit])
+                    # Sort by score and take top results
+                    formatted_results.sort(key=lambda x: x.get('score', 0), reverse=True)
+                    formatted_results = formatted_results[:limit]
+
+            # Debug logging
+            logger.info(f"ChromaDB raw results: ids={len(results.get('ids', [[]])[0])}, distances={len(results.get('distances', [[]])[0])}")
+            for i, result in enumerate(formatted_results[:3]):
+                payload = result.get('payload', {})
+                doc_text = payload.get('text', '')[:100] if payload else "No payload"
+                match_type = result.get('match_type', 'semantic')
+                logger.info(f"Result {i}: score={result.get('score', 0):.4f}, match_type={match_type}, text='{doc_text}...'")
 
             logger.info(f"Search returned {len(formatted_results)} results")
             return formatted_results

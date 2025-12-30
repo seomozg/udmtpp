@@ -1,0 +1,150 @@
+"""
+Configuration file for UdmTPP RAG system
+All data and settings are centralized here
+"""
+
+import os
+from typing import Dict, List
+
+# API Keys and URLs
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+SITE_URL = "https://udmtpp.ru"
+SITEMAP_URL = "https://udmtpp.ru/sitemap.xml"
+
+# Model settings
+EMBEDDING_MODEL = "intfloat/multilingual-e5-base"
+LLM_MODEL = "deepseek-chat"
+
+# Chunking settings
+MAX_CHUNK_SIZE = 800
+CHUNK_OVERLAP = 50
+
+# Search settings
+DEFAULT_N_RESULTS = 5
+CONFIDENCE_THRESHOLD = 0.4
+MAX_TOKENS = 1000
+
+# Collection configurations
+COLLECTION_CONFIGS = {
+    "719": {
+        "name": "Консультации по 719-ПП / Акт СТ",
+        "url_keywords": ["719"],
+        "text_keywords": ["реестр", "промышленной продукции", "акт ст", "постановление"]
+    },
+    "support": {
+        "name": "Меры поддержки бизнеса",
+        "url_keywords": [],
+        "text_keywords": ["субсидии", "гранты", "льготы", "поддержка бизнеса", "финансовая поддержка", "государственная поддержка"]
+    },
+    "services": {
+        "name": "Услуги ТПП",
+        "description": "Услуги ТПП",
+        "url_keywords": ["uslugi", "ekspertiza", "oczenka", "sertifikaty", "yuridicheskie-uslugi", "ocenka-imushhestva"],
+        "text_keywords": ["услуги тпп", "экспертиза", "оценка", "сертификация", "юридические услуги"]
+    },
+    "membership": {
+        "name": "Членство в ТПП",
+        "url_keywords": ["членство", "vstupit", "utpp-chleny"],
+        "text_keywords": ["членство"]
+    },
+    "events": {
+        "name": "Мероприятия, обучение",
+        "url_keywords": ["meropriyat", "seminar", "konferenc", "forum"],
+        "text_keywords": ["мероприятие", "конференция", "форум"]
+    },
+    "cooperation": {
+        "name": "Поиск партнёров / коопераций",
+        "url_keywords": ["kommercheskoe-predlozhenie", "partner", "kooperacziya"],
+        "text_keywords": ["партнеры", "сотрудничество", "деловое партнерство"]
+    },
+    "site": {
+        "name": "Общий контент сайта",
+        "url_keywords": [],
+        "text_keywords": []
+    }
+}
+
+
+# Categorization prompt template (universal for single content or sitemap)
+CATEGORIZATION_PROMPT = """
+Определи наиболее подходящую категорию для контента сайта ТПП.
+
+{input_section}
+
+Доступные категории:
+{categories}
+
+ВАЖНЫЕ УТОЧНЕНИЯ:
+- Курсы обучения, тренинги, семинары по повышению квалификации → services (услуги ТПП)
+- Мероприятия, конференции, выставки, форумы → events
+- Если контент описывает услуги ТПП (экспертиза, оценка, сертификация) → services
+- Если контент о вступлении в ТПП → membership
+
+Проанализируй URL и содержание текста. Определи, к какой категории этот контент относится больше всего.
+
+Если предоставлен список URL, верни результат в формате JSON:
+{{
+  "mappings": {{
+    "url1": "category1",
+    "url2": "category2",
+    ...
+  }}
+}}
+
+Если одиночный URL с текстом, верни только название категории (одно слово из списка: 719, support, services, membership, events, cooperation, site).
+"""
+
+# RAG answer generation prompt template
+RAG_ANSWER_PROMPT = """На основе предоставленного контекста ответьте на вопрос пользователя.
+
+Контекст:
+{context}
+
+Вопрос: {query}
+
+Инструкции:
+- Отвечайте только на основе предоставленного контекста
+- Если в контексте нет информации для ответа, скажите об этом
+- Будьте конкретны и полезны
+- Укажите источники информации, если применимо
+
+Ответ:"""
+
+# Low confidence response message
+LOW_CONFIDENCE_MESSAGE = "На основе предоставленного контекста информация отсутствует или недостаточно релевантна."
+
+# Query expansion templates (extended)
+QUERY_EXPANSION_TEMPLATES = {
+    "greetings": ["привет", "здравствуй", "добрый день", "доброе утро", "добрый вечер", "здравствуйте", "доброго времени"],
+    "events": ["мероприятия", "семинары", "конференции", "вебинары", "обучение", "курсы", "тренинги", "форумы", "выставки", "круглые столы"],
+    "services": ["услуги", "экспертиза", "оценка", "сертификация", "консультации", "аудит", "проверка", "осмотр", "анализ", "диагностика"],
+    "support": ["поддержка", "субсидии", "гранты", "льготы", "финансирование", "помощь", "стимулирование", "компенсации", "возмещение"],
+    "membership": ["членство", "вступление", "участие", "члены", "партнеры", "ассоциация", "союз", "присоединение"],
+    "cooperation": ["партнеры", "сотрудничество", "поставщики", "подрядчики", "контрагенты", "партнерство", "альянс", "взаимодействие"],
+    "documents": ["документы", "сертификаты", "лицензии", "разрешения", "акты", "справки", "удостоверения"],
+    "consulting": ["консультации", "советы", "рекомендации", "помощь", "сопровождение", "содействие"],
+    "legal": ["юридические", "правовые", "законодательство", "нормативные", "регуляторные", "договорные"],
+    "business": ["бизнес", "предпринимательство", "коммерция", "экономика", "производство", "торговля", "строительство", "строительные"]
+}
+
+# Logging configuration
+LOGGING_CONFIG = {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+}
+
+# File paths
+CACHE_DIR = "site_cache"
+CHROMA_DB_DIR = "chroma_db"
+
+# Collection names (for backward compatibility)
+COLLECTION_NAMES = list(COLLECTION_CONFIGS.keys())
+
+# Rate limiting
+REQUEST_TIMEOUT = 30
+RATE_LIMIT_DELAY = 1
+
+# API settings
+API_HOST = "0.0.0.0"
+API_PORT = 8001
+RELOAD = True

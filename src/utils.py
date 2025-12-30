@@ -7,18 +7,20 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+from config import LOGGING_CONFIG, MAX_CHUNK_SIZE, CHUNK_OVERLAP
+
 def setup_logging():
     """Setup logging configuration"""
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        level=getattr(logging, LOGGING_CONFIG["level"]),
+        format=LOGGING_CONFIG["format"]
     )
 
 def get_env_var(key: str, default: str = "") -> str:
     """Get environment variable with fallback"""
     return os.getenv(key, default)
 
-def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
+def chunk_text(text: str, chunk_size: int = MAX_CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
     """Split text into chunks with overlap"""
     if len(text) <= chunk_size:
         return [text]
@@ -35,13 +37,23 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100) -> List[st
 
     return chunks
 
-def adaptive_chunk_text(text: str) -> List[str]:
-    """Single chunk per document to completely eliminate duplicates"""
-    # Always return the entire text as one chunk
-    # This ensures no duplicates in the database
-    return [text]
+def adaptive_chunk_text(text: str, max_chunk_size: int = MAX_CHUNK_SIZE) -> List[str]:
+    """Adaptive chunking based on text length and structure"""
+    text_length = len(text)
 
-def semantic_chunk_text(text: str, max_chunk_size: int = 800, overlap: int = 100) -> List[str]:
+    # For very short texts, return as single chunk
+    if text_length <= max_chunk_size // 4:
+        return [text]
+
+    # For medium texts, use semantic chunking
+    if text_length <= max_chunk_size * 2:
+        return semantic_chunk_text(text, max_chunk_size=max_chunk_size)
+
+    # For long texts, use smaller chunks to ensure better retrieval
+    small_chunk_size = max_chunk_size // 2
+    return semantic_chunk_text(text, max_chunk_size=small_chunk_size)
+
+def semantic_chunk_text(text: str, max_chunk_size: int = MAX_CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
     """Semantic chunking with sentence and paragraph awareness"""
     # Ensure minimum chunk size
     if len(text) <= max_chunk_size:
