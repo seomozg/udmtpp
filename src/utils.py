@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 
@@ -35,89 +36,103 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100) -> List[st
     return chunks
 
 def adaptive_chunk_text(text: str) -> List[str]:
-    """Adaptive chunking based on content analysis"""
-    import re
+    """Single chunk per document to completely eliminate duplicates"""
+    # Always return the entire text as one chunk
+    # This ensures no duplicates in the database
+    return [text]
 
-    # Analyze content structure
-    sentences = re.split(r'[.!?]+\s+', text)
-    paragraphs = text.split('\n\n')
+def semantic_chunk_text(text: str, max_chunk_size: int = 800, overlap: int = 100) -> List[str]:
+    """Semantic chunking with sentence and paragraph awareness"""
+    # Ensure minimum chunk size
+    if len(text) <= max_chunk_size:
+        return [text]
 
-    # Calculate content metrics
-    avg_sentence_length = sum(len(s) for s in sentences) / len(sentences) if sentences else 0
-    num_paragraphs = len([p for p in paragraphs if p.strip()])
-    total_length = len(text)
+    # Try NLTK first, fallback to regex
+    try:
+        import nltk
+        try:
+            nltk.data.find('tokenizers/punkt')
+        except LookupError:
+            nltk.download('punkt', quiet=True)
 
-    # Adaptive chunk sizing based on content
-    if total_length < 500:
-        # Short content - single chunk
-        chunk_size = total_length
-        overlap = 0
-    elif avg_sentence_length > 100:
-        # Complex sentences - smaller chunks
-        chunk_size = 800
-        overlap = 150
-    elif num_paragraphs > 10:
-        # Well-structured content - medium chunks
-        chunk_size = 1200
-        overlap = 200
-    else:
-        # Default chunking
-        chunk_size = 1000
-        overlap = 150
+        # Split by sentences
+        sentences = nltk.sent_tokenize(text)
+    except ImportError:
+        # Fallback: split by punctuation
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        sentences = [s.strip() for s in sentences if s.strip()]
 
-    # Semantic boundary-aware chunking
-    return semantic_chunk_text(text, chunk_size, overlap)
-
-def semantic_chunk_text(text: str, chunk_size: int, overlap: int) -> List[str]:
-    """Chunk text respecting semantic boundaries"""
-    import re
-
-    if len(text) <= chunk_size:
+    if not sentences:
         return [text]
 
     chunks = []
-    start = 0
+    current_chunk = ""
+    current_length = 0
 
-    while start < len(text):
-        # Try to find good semantic boundary within chunk_size window
-        end = start + chunk_size
+    for sentence in sentences:
+        sentence_length = len(sentence)
 
-        if end >= len(text):
-            # Last chunk
-            chunks.append(text[start:])
-            break
+        # If single sentence is too long, split it by words
+        if sentence_length > max_chunk_size:
+            # Split long sentence by words
+            words = sentence.split()
+            temp_chunk = ""
+            temp_length = 0
 
-        # Look for paragraph boundaries first
-        para_match = re.search(r'\n\s*\n', text[start:end+200])
-        if para_match and para_match.end() + start < end + 100:
-            end = start + para_match.end()
+            for word in words:
+                word_with_space = word + " "
+                if temp_length + len(word_with_space) > max_chunk_size and temp_chunk:
+                    # Save current temp chunk
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                    current_chunk = temp_chunk.strip()
+                    current_length = temp_length
+                    temp_chunk = word_with_space
+                    temp_length = len(word_with_space)
+                else:
+                    temp_chunk += word_with_space
+                    temp_length += len(word_with_space)
+
+            # Add remaining temp chunk
+            if temp_chunk:
+                if current_length + temp_length > max_chunk_size and current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = temp_chunk.strip()
+                    current_length = temp_length
+                else:
+                    current_chunk += temp_chunk
+                    current_length += temp_length
+
+        # Normal sentence processing
+        elif current_length + sentence_length > max_chunk_size and current_chunk:
+            # Save current chunk
+            chunks.append(current_chunk.strip())
+
+            # Start new chunk with overlap if possible
+            if len(current_chunk) > overlap:
+                overlap_text = current_chunk[-overlap:].strip()
+                current_chunk = overlap_text + " " + sentence
+                current_length = len(current_chunk)
+            else:
+                current_chunk = sentence
+                current_length = sentence_length
         else:
-            # Look for sentence boundaries
-            sentence_match = re.search(r'[.!?]\s+', text[start:end+50])
-            if sentence_match and sentence_match.end() + start < end + 50:
-                end = start + sentence_match.end()
+            # Add to current chunk
+            if current_chunk:
+                current_chunk += " " + sentence
+                current_length += sentence_length + 1  # +1 for space
+            else:
+                current_chunk = sentence
+                current_length = sentence_length
 
-        # Extract chunk
-        chunk = text[start:end].strip()
-        if chunk:  # Only add non-empty chunks
-            chunks.append(chunk)
+    # Add final chunk
+    if current_chunk:
+        chunks.append(current_chunk.strip())
 
-        # Calculate next start with overlap
-        overlap_start = max(0, end - overlap)
-        next_para = re.search(r'\n\s*\n', text[overlap_start:])
-        if next_para:
-            start = overlap_start + next_para.end()
-        else:
-            start = overlap_start
+    # Ensure we have at least one chunk
+    return chunks if chunks else [text]
 
-        # Safety check to prevent infinite loop
-        if start >= len(text):
-            break
-        elif len(chunks) > 100:  # Emergency break
-            chunks.append(text[start:])
-            break
 
-    return chunks
 
 def convert_numpy_types(obj: Any) -> Any:
     """Convert numpy types to Python native types for JSON serialization"""
@@ -140,8 +155,20 @@ def convert_numpy_types(obj: Any) -> Any:
         # If numpy is not available, return as-is
         return obj
 
-def calculate_confidence(scores: List[float]) -> float:
-    """Calculate average confidence from similarity scores"""
+def calculate_confidence(scores: List[float], top_k: int = 3) -> float:
+    """Calculate confidence from top similarity scores"""
     if not scores:
         return 0.0
-    return convert_numpy_types(sum(scores) / len(scores))
+
+    # Sort scores in descending order and take top_k
+    sorted_scores = sorted(scores, reverse=True)
+    top_scores = sorted_scores[:top_k]
+
+    # Calculate weighted average: higher weight for top results
+    if len(top_scores) == 1:
+        return convert_numpy_types(top_scores[0])
+    elif len(top_scores) == 2:
+        return convert_numpy_types(0.7 * top_scores[0] + 0.3 * top_scores[1])
+    else:
+        # For 3+ scores: 50% top, 30% second, 20% third
+        return convert_numpy_types(0.5 * top_scores[0] + 0.3 * top_scores[1] + 0.2 * top_scores[2])

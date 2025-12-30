@@ -18,35 +18,49 @@ class ChromaDB:
 
     def __init__(self):
         if not hasattr(self, 'initialized'):
-            # Initialize persistent ChromaDB
-            persist_dir = os.path.join(os.getcwd(), "chroma_db")
+            # Initialize persistent ChromaDB - use absolute path from script location
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(script_dir)  # Go up from src/ to project root
+            persist_dir = os.path.join(project_root, "chroma_db")
             os.makedirs(persist_dir, exist_ok=True)
             self.client = chromadb.PersistentClient(path=persist_dir)
             logger.info(f"Initialized ChromaDB with persistence at {persist_dir}")
 
-            # Collection configurations
+            # Collection configurations - updated for better AI categorization
             self.collection_configs = {
-                "719": "Консультации по 719-ПП / Акт СТ",
-                "support": "Меры поддержки бизнеса",
-                "services": "Услуги ТПП",
-                "membership": "Членство в ТПП",
-                "events": "Мероприятия, обучение",
-                "cooperation": "Поиск партнёров / коопераций",
-                "site": "Общий контент сайта"
+                "legal": "Юридические услуги, консультации, законодательство, правовая помощь",
+                "support": "Финансовая поддержка, субсидии, гранты, льготы для бизнеса",
+                "services": "Услуги ТПП, экспертиза, сертификация, сопровождение",
+                "membership": "Членство в ТПП, вступление, преимущества, взносы",
+                "events": "Мероприятия, конференции, вебинары, семинары, обучение",
+                "business": "Бизнес-информация, партнерство, кооперация, развитие бизнеса",
+                "news": "Новости, статьи, пресс-релизы, общая информация"
             }
 
             # Initialize collections
             self.collections = {}
+
+            # First, try to get existing collections
+            existing_collections = self.client.list_collections()
+            existing_names = {col.name: col for col in existing_collections}
+
             for collection_name in self.collection_configs.keys():
                 try:
-                    collection = self.client.get_or_create_collection(
-                        name=collection_name,
-                        metadata={"description": self.collection_configs[collection_name]}
-                    )
+                    if collection_name in existing_names:
+                        # Use existing collection
+                        collection = existing_names[collection_name]
+                        logger.info(f"Loaded existing collection {collection_name}")
+                    else:
+                        # Create new collection
+                        collection = self.client.get_or_create_collection(
+                            name=collection_name,
+                            metadata={"description": self.collection_configs[collection_name]}
+                        )
+                        logger.info(f"Created new collection {collection_name}")
+
                     self.collections[collection_name] = collection
-                    logger.info(f"Collection {collection_name} ready")
                 except Exception as e:
-                    logger.error(f"Error creating collection {collection_name}: {e}")
+                    logger.error(f"Error initializing collection {collection_name}: {e}")
 
             self.initialized = True
 
