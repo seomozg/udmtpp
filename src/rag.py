@@ -37,7 +37,7 @@ class RAGSystem:
             self.deepseek_api_key = get_env_var("DEEPSEEK_API_KEY")
             self.deepseek_base_url = get_env_var("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
             self.top_k = int(get_env_var("TOP_K", "5"))
-            self.confidence_threshold = float(get_env_var("CONFIDENCE_THRESHOLD", "0.7"))
+            self.confidence_threshold = float(get_env_var("CONFIDENCE_THRESHOLD", "0.4"))
 
             # Initialize BM25 indexes for hybrid search
             self.bm25_indexes = {}
@@ -320,9 +320,10 @@ class RAGSystem:
             logger.error(f"Error generating response: {e}")
             return "Произошла ошибка при обработке запроса. Попробуйте позже."
 
-    async def generate_response_stream(self, query: str, context: str, confidence: float):
+    async def generate_response_stream(self, query: str, context: str, confidence: float, confidence_threshold: Optional[float] = None):
         """Generate streaming response using DeepSeek (async version)"""
-        if confidence < self.confidence_threshold:
+        threshold = confidence_threshold if confidence_threshold is not None else self.confidence_threshold
+        if confidence < threshold:
             yield "Извините, я не нашел достаточно надежной информации для ответа на ваш вопрос. Пожалуйста, уточните вопрос или обратитесь к специалистам ТПП УР."
             return
 
@@ -449,9 +450,12 @@ class RAGSystem:
             "sources": search_result["sources"]
         }
 
-    async def ask_stream(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None):
+    async def ask_stream(self, query: str, collection_name: Optional[str] = None, n_results: int = 5, collections_filter: Optional[List[str]] = None, confidence_threshold: Optional[float] = None):
         """Main method to ask questions with streaming response"""
         logger.info(f"Processing streaming query: {query} with n_results={n_results}")
+
+        # Use provided confidence_threshold or default
+        threshold = confidence_threshold if confidence_threshold is not None else self.confidence_threshold
 
         # Expand query for better search
         expanded_query = self.expand_query(query)
@@ -470,7 +474,7 @@ class RAGSystem:
 
         # Stream response
         response_parts = []
-        async for chunk in self.generate_response_stream(query, search_result["context"], search_result["confidence"]):
+        async for chunk in self.generate_response_stream(query, search_result["context"], search_result["confidence"], threshold):
             response_parts.append(chunk)
             yield {
                 "type": "content",

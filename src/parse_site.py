@@ -46,7 +46,7 @@ class SiteParser:
             from vector_db import ChromaDB
             self.client = ChromaDB()
 
-        # Create collections
+        # Create collections - following README.md naming
         self.collection_configs = {
             "719": "Консультации по 719-ПП / Акт СТ",
             "support": "Меры поддержки бизнеса",
@@ -126,24 +126,26 @@ class SiteParser:
             logger.error(f"Error saving text to cache for {url}: {e}")
 
     def categorize_content(self, url: str, text: str) -> str:
-        """Categorize content based on URL and text analysis"""
+        """Categorize content based on URL and text analysis - following README.md naming"""
         url_lower = url.lower()
         text_lower = text.lower()
 
+        # Map keywords to collection names (matching README.md)
         categories = {
-            "719": ["719", "акт ст", "постановление"],
-            "support": ["поддержка", "субсидии", "гранты", "помощь"],
-            "services": ["услуги", "консультации", "сертификаты"],
-            "membership": ["членство", "вступить", "участие"],
-            "events": ["мероприятия", "обучение", "семинары", "конференции"],
-            "cooperation": ["партнёры", "кооперация", "сотрудничество"],
+            "719": ["719", "акт ст", "постановление", "юридическ", "законодательств"],
+            "support": ["поддержка", "субсидии", "гранты", "помощь", "льготы"],
+            "services": ["услуги", "консультации", "сертификаты", "экспертиза"],
+            "membership": ["членство", "вступить", "участие", "взносы"],
+            "events": ["мероприятия", "обучение", "семинары", "конференции", "вебинары"],
+            "cooperation": ["партнёры", "кооперация", "сотрудничество", "бизнес"],
+            "site": ["новости", "статьи", "пресс-релиз"]
         }
 
         for category, keywords in categories.items():
             if any(keyword in url_lower or keyword in text_lower for keyword in keywords):
                 return category
 
-        return "site"  # Default category
+        return "site"  # Default category for general content
 
     def process_urls(self, urls: List[str]):
         """Process URLs and add to ChromaDB"""

@@ -124,3 +124,18 @@ static/uploads/
 logs/
 *.db
 qdrant_storage/
+
+# Vector database and cache
+chroma_db/
+site_cache/
+src/chroma_db/
+src/site_cache/
+categories_cache.json
+
+# Debug and test files
+batch_rebuild.py
+check_*.py
+debug_*.py
+parse_full_site.py
+rebuild_db.py
+test_*.py

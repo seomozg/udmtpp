@@ -214,13 +214,13 @@ async def upload_file(
             # Plain text file
             text = content.decode('utf-8')
 
-        # Chunk and embed
-        from utils import adaptive_chunk_text
+        # Chunk and embed with semantic chunking
+        from utils import semantic_chunk_text
         from embed import EmbeddingModel
         import uuid
 
         embedder = EmbeddingModel()
-        chunks = adaptive_chunk_text(text)
+        chunks = semantic_chunk_text(text, max_chunk_size=800, overlap=50)
         embeddings = embedder.encode(chunks)
 
         # Create ChromaDB compatible points
@@ -319,12 +319,35 @@ async def rebuild_from_cache_api():
         time.sleep(2)
 
         # Process files from site_cache
-        cache_dir = os.path.join(os.getcwd(), "site_cache")
+        cache_dir = os.path.join(os.path.dirname(__file__), "..", "site_cache")
         if not os.path.exists(cache_dir):
             raise HTTPException(status_code=404, detail="site_cache directory not found")
 
-        files = [f for f in os.listdir(cache_dir) if f.endswith('.txt')]
-        logger.info(f"Found {len(files)} files in cache")
+        # Load categories cache to skip already processed files
+        categories_cache = load_categories_cache()
+        processed_urls = set(categories_cache.keys())
+
+        all_files = [f for f in os.listdir(cache_dir) if f.endswith('.txt')]
+        files = []
+
+        # Filter out already processed files
+        for filename in all_files:
+            filepath = os.path.join(cache_dir, filename)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                lines = content.split('\n', 2)
+                url = lines[0].replace('URL: ', '') if lines[0].startswith('URL: ') else filename
+                cache_key = url if url != filename else filename
+
+                if cache_key not in processed_urls:
+                    files.append(filename)
+            except Exception as e:
+                logger.warning(f"Could not check file {filename}: {e}")
+                continue
+
+        logger.info(f"Processing {len(files)} remaining files out of {len(all_files)} total (skipping {len(processed_urls)} already processed)")
 
         processed_count = 0
         total_points = 0
@@ -343,17 +366,18 @@ async def rebuild_from_cache_api():
                 url = lines[0].replace('URL: ', '') if lines[0].startswith('URL: ') else filename
                 text = lines[2] if len(lines) > 2 else content
 
-                # AI categorization using DeepSeek
-                category = categorize_with_ai(text, chroma_db.collection_configs)
+                # AI categorization using DeepSeek with caching
+                cache_key = url if url != filename else filename
+                category = categorize_with_ai(text, chroma_db.collection_configs, cache_key)
                 print(f"   🏷️  AI categorized as: {category}")
 
-                # Chunk and embed
-                from utils import adaptive_chunk_text
+                # Chunk and embed with semantic chunking
+                from utils import semantic_chunk_text
                 from embed import EmbeddingModel
                 import uuid
 
                 embedder = EmbeddingModel()
-                chunks = adaptive_chunk_text(text)
+                chunks = semantic_chunk_text(text, max_chunk_size=800, overlap=50)
                 embeddings = embedder.encode(chunks)
 
                 # Create points
@@ -416,12 +440,38 @@ async def rebuild_from_cache_api():
         logger.error(f"Rebuild from cache error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-def categorize_with_ai(text: str, collection_configs: dict) -> str:
-    """Use DeepSeek AI to categorize text content"""
+def load_categories_cache():
+    """Load categories cache from file"""
     try:
+        with open('categories_cache.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_categories_cache(cache):
+    """Save categories cache to file"""
+    try:
+        with open('categories_cache.json', 'w', encoding='utf-8') as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save categories cache: {e}")
+
+def categorize_with_ai(text: str, collection_configs: dict, cache_key: str) -> str:
+    """Use DeepSeek AI to categorize text content with caching - following README.md categories"""
+    try:
+        # Load existing cache
+        cache = load_categories_cache()
+
+        # Check if we already have this category cached
+        if cache_key in cache:
+            cached_category = cache[cache_key]
+            if cached_category in collection_configs:
+                logger.info(f"Using cached category for {cache_key}: {cached_category}")
+                return cached_category
+
         from utils import get_env_var
 
-        # Prepare prompt
+        # Prepare prompt with README.md category names
         categories_desc = "\n".join([f"- {name}: {desc}" for name, desc in collection_configs.items()])
 
         prompt = f"""Проанализируй следующий текст и определи, к какой категории он относится.
@@ -432,13 +482,14 @@ def categorize_with_ai(text: str, collection_configs: dict) -> str:
 Текст для анализа:
 {text[:2000]}...
 
-Верни ТОЛЬКО название категории (одно слово), без объяснений."""
+Верни ТОЛЬКО название категории из списка выше, без объяснений."""
 
         # Call DeepSeek API
         import requests
         deepseek_api_key = get_env_var("DEEPSEEK_API_KEY")
         deepseek_base_url = get_env_var("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
+        logger.info(f"Making AI request for categorization of {cache_key}")
         response = requests.post(
             f"{deepseek_base_url}/chat/completions",
             headers={
@@ -458,15 +509,30 @@ def categorize_with_ai(text: str, collection_configs: dict) -> str:
             result = response.json()
             category = result['choices'][0]['message']['content'].strip()
 
-            # Validate category
-            if category in collection_configs:
+            # Validate category against README.md names
+            valid_categories = ["719", "support", "services", "membership", "events", "cooperation", "site"]
+            if category in valid_categories:
+                # Cache the result
+                cache[cache_key] = category
+                save_categories_cache(cache)
+                logger.info(f"Cached new category for {cache_key}: {category}")
                 return category
 
         # Fallback to default
+        logger.warning(f"Invalid category from AI for {cache_key}, using default")
+        cache[cache_key] = "site"
+        save_categories_cache(cache)
         return "site"
 
     except Exception as e:
-        logger.warning(f"AI categorization failed: {e}, using default category")
+        logger.warning(f"AI categorization failed for {cache_key}: {e}, using default category")
+        # Even on error, try to cache the default
+        try:
+            cache = load_categories_cache()
+            cache[cache_key] = "site"
+            save_categories_cache(cache)
+        except:
+            pass
         return "site"
 
 if __name__ == "__main__":
