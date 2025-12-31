@@ -175,8 +175,13 @@ class TestRAGSystem:
         rag = RAGSystem()
 
         results = [
+<<<<<<< Updated upstream
             {"payload": {"text": "test text 1", "url": "test1.com"}, "score": 0.8},
             {"payload": {"text": "test text 2", "url": "test2.com"}, "score": 0.9}
+=======
+            {"score": 0.8, "payload": {"text": "test text 1", "url": "test1.com"}},
+            {"score": 0.9, "payload": {"text": "test text 2", "url": "test2.com"}}
+>>>>>>> Stashed changes
         ]
 
         context = rag._prepare_context(results)
@@ -192,8 +197,13 @@ class TestRAGSystem:
         rag = RAGSystem()
 
         results = [
+<<<<<<< Updated upstream
             {"payload": {"url": "test1.com", "category": "test"}, "score": 0.8},
             {"payload": {"url": "test2.com", "category": "test"}, "score": 0.9}
+=======
+            {"score": 0.8, "payload": {"url": "test1.com", "category": "test"}},
+            {"score": 0.9, "payload": {"url": "test2.com", "category": "test"}}
+>>>>>>> Stashed changes
         ]
 
         sources = rag._extract_sources(results)
