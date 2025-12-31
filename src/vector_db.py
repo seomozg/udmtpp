@@ -266,6 +266,27 @@ class ChromaDB:
             logger.error(f"Error getting documents from {collection_name}: {e}")
             return []
 
+    def delete_points(self, collection_name: str, point_ids: List[str]):
+        """Delete points from ChromaDB collection by IDs"""
+        if collection_name not in self.collections:
+            logger.error(f"Collection {collection_name} not found")
+            return False
+
+        if not point_ids:
+            logger.warning("No point IDs provided for deletion")
+            return True
+
+        collection = self.collections[collection_name]
+        logger.info(f"Deleting {len(point_ids)} points from {collection_name}")
+
+        try:
+            collection.delete(ids=point_ids)
+            logger.info(f"Successfully deleted {len(point_ids)} points from {collection_name}")
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting points from {collection_name}: {e}")
+            return False
+
     def delete_collection(self, collection_name: str):
         """Delete a collection"""
         try:
