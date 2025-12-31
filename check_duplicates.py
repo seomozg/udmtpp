@@ -19,14 +19,14 @@ def check_duplicates():
     # Get collection info
     collections_info = db.get_collection_info()
 
-    print("🔍 ПРОВЕРКА НА ДУБЛИКАТЫ В БАЗЕ ДАННЫХ")
+    print("PROVERKA NA DUBLIKATY V BAZE DANNYKH")
     print("=" * 60)
 
     total_duplicates = 0
     total_documents = 0
 
     for collection_name in collections_info.keys():
-        print(f"\n📂 Анализ коллекции: {collection_name}")
+        print(f"\nAnaliz kollektsii: {collection_name}")
         print("-" * 40)
 
         # Get all documents
@@ -52,10 +52,19 @@ def check_duplicates():
         for text, docs in text_groups.items():
             if len(docs) > 1:
                 duplicates_found += len(docs)
+                # Check if texts are truly identical (including whitespace)
+                all_identical = all(
+                    doc.get('text', '') == docs[0].get('text', '')
+                    for doc in docs
+                )
+
                 duplicate_texts.append({
                     'text': text[:100] + '...' if len(text) > 100 else text,
                     'count': len(docs),
-                    'docs': docs
+                    'docs': docs,
+                    'truly_identical': all_identical,
+                    'text_lengths': [len(doc.get('text', '')) for doc in docs],
+                    'text_samples': [doc.get('text', '')[:50] for doc in docs[:3]]
                 })
 
         if duplicate_texts:
@@ -63,10 +72,19 @@ def check_duplicates():
             print(f"  📊 Уникальных текстов: {len(text_groups)}")
             print(f"  📈 Коэффициент дублирования: {duplicates_found/len(documents)*100:.1f}%")
 
-            # Show top duplicates
+            # Show top duplicates with detailed analysis
             duplicate_texts.sort(key=lambda x: x['count'], reverse=True)
+            print(f"  📋 Детальный анализ топ-3 дублей:")
+
             for i, dup in enumerate(duplicate_texts[:3], 1):  # Show top 3
-                print(f"    {i}. \"{dup['text']}\" - {dup['count']} копий")
+                print(f"    {i}. Текст: \"{dup['text']}\"")
+                print(f"       Копий: {dup['count']}")
+                print(f"       100% идентичны: {dup['truly_identical']}")
+                print(f"       Длины текстов: {dup['text_lengths'][:5]}")
+                if not dup['truly_identical']:
+                    print("       ⚠️  Тексты различаются!")
+                    print(f"       Примеры: {dup['text_samples']}")
+                print()
         else:
             print(f"  ✅ Дубликатов не найдено")
             print(f"  📊 Уникальных текстов: {len(text_groups)}")
