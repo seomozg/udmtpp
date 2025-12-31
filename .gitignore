@@ -132,6 +132,10 @@ src/chroma_db/
 src/site_cache/
 categories_cache.json
 
+# Backups and utilities (large files and maintenance tools)
+backups/
+utils/
+
 # Debug and test files
 batch_rebuild.py
 check_*.py
