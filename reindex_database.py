@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 def reindex_database():
     """Reindex entire database with improved chunking and deduplication"""
 
-    print("REINDEX DATABASE WITH IMPROVED CHUNKING")
+    print("REINDEX DATABASE WITH SEMANTIC CHUNKING")
     print("=" * 60)
-    print("This will recreate all chunks using enhanced semantic chunking")
+    print("This will recreate all chunks using standard semantic chunking")
     print("and remove duplicates during the process")
     print("=" * 60)
 
@@ -95,7 +95,7 @@ def reindex_database():
                 if not original_text:
                     continue
 
-                # Apply improved chunking
+                # Apply standard semantic chunking
                 chunks = semantic_chunk_text(original_text, max_chunk_size=800, overlap=50)
 
                 if not chunks:

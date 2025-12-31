@@ -53,51 +53,11 @@ def adaptive_chunk_text(text: str, max_chunk_size: int = MAX_CHUNK_SIZE) -> List
     small_chunk_size = max_chunk_size // 2
     return semantic_chunk_text(text, max_chunk_size=small_chunk_size)
 
-def remove_repeated_content(text: str) -> str:
-    """Remove common repeated content like headers, footers, contact info"""
-    lines = text.split('\n')
-    cleaned_lines = []
-    seen_lines = set()
-
-    # Common patterns to remove (case insensitive)
-    remove_patterns = [
-        r'.*\b(пн—чт|пт|выходной|сб|вс|телефон|email|адрес)\b.*',  # Contact info
-        r'.*\b(ул\.|улица|г\.|город|индекс|почта)\b.*',  # Address info
-        r'.*\b(политика конфиденциальности|обратная связь|задать вопрос)\b.*',  # Form headers
-        r'.*\b(поля отмеченные.*обязательны|согласие на обработку|персональных данных)\b.*',  # Legal forms
-        r'.*\b(отправить|нажмимая.*кнопку|я даю.*согласие)\b.*',  # Form buttons
-        r'^[\s]*$',  # Empty lines
-        r'^[-=\s]*$',  # Separator lines
-    ]
-
-    for line in lines:
-        line_lower = line.lower().strip()
-
-        # Skip if line matches removal patterns
-        should_remove = False
-        for pattern in remove_patterns:
-            if re.search(pattern, line_lower, re.IGNORECASE):
-                should_remove = True
-                break
-
-        # Skip if line was seen before (simple deduplication)
-        if line_lower in seen_lines:
-            should_remove = True
-
-        if not should_remove and line.strip():
-            cleaned_lines.append(line)
-            seen_lines.add(line_lower)
-
-    return '\n'.join(cleaned_lines)
-
 def semantic_chunk_text(text: str, max_chunk_size: int = MAX_CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
-    """Enhanced semantic chunking with content filtering and deduplication"""
-    # First, remove repeated content
-    text = remove_repeated_content(text)
-
-    # Ensure minimum chunk size after cleaning
+    """Semantic chunking with sentence and paragraph awareness"""
+    # Ensure minimum chunk size
     if len(text) <= max_chunk_size:
-        return [text] if text.strip() else []
+        return [text]
 
     # Try NLTK first, fallback to regex
     try:
@@ -115,19 +75,14 @@ def semantic_chunk_text(text: str, max_chunk_size: int = MAX_CHUNK_SIZE, overlap
         sentences = [s.strip() for s in sentences if s.strip()]
 
     if not sentences:
-        return [text] if text.strip() else []
+        return [text]
 
     chunks = []
     current_chunk = ""
     current_length = 0
-    chunk_texts_seen = set()  # For deduplication within chunks
 
     for sentence in sentences:
         sentence_length = len(sentence)
-
-        # Skip very short sentences that might be noise
-        if sentence_length < 10:
-            continue
 
         # If single sentence is too long, split it by words
         if sentence_length > max_chunk_size:
@@ -140,13 +95,10 @@ def semantic_chunk_text(text: str, max_chunk_size: int = MAX_CHUNK_SIZE, overlap
                 word_with_space = word + " "
                 if temp_length + len(word_with_space) > max_chunk_size and temp_chunk:
                     # Save current temp chunk
-                    chunk_candidate = temp_chunk.strip()
-                    if chunk_candidate and chunk_candidate not in chunk_texts_seen:
-                        if current_chunk:
-                            chunks.append(current_chunk.strip())
-                        current_chunk = chunk_candidate
-                        current_length = temp_length
-                        chunk_texts_seen.add(chunk_candidate)
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                    current_chunk = temp_chunk.strip()
+                    current_length = temp_length
                     temp_chunk = word_with_space
                     temp_length = len(word_with_space)
                 else:
@@ -155,25 +107,18 @@ def semantic_chunk_text(text: str, max_chunk_size: int = MAX_CHUNK_SIZE, overlap
 
             # Add remaining temp chunk
             if temp_chunk:
-                chunk_candidate = temp_chunk.strip()
-                if chunk_candidate and chunk_candidate not in chunk_texts_seen:
-                    if current_length + temp_length > max_chunk_size and current_chunk:
-                        chunks.append(current_chunk.strip())
-                        current_chunk = chunk_candidate
-                        current_length = temp_length
-                        chunk_texts_seen.add(chunk_candidate)
-                    else:
-                        current_chunk += " " + chunk_candidate
-                        current_length += temp_length + 1
-                        chunk_texts_seen.add(chunk_candidate)
+                if current_length + temp_length > max_chunk_size and current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = temp_chunk.strip()
+                    current_length = temp_length
+                else:
+                    current_chunk += temp_chunk
+                    current_length += temp_length
 
         # Normal sentence processing
         elif current_length + sentence_length > max_chunk_size and current_chunk:
-            # Save current chunk if it's unique
-            chunk_candidate = current_chunk.strip()
-            if chunk_candidate and chunk_candidate not in chunk_texts_seen:
-                chunks.append(chunk_candidate)
-                chunk_texts_seen.add(chunk_candidate)
+            # Save current chunk
+            chunks.append(current_chunk.strip())
 
             # Start new chunk with overlap if possible
             if len(current_chunk) > overlap:
@@ -192,22 +137,12 @@ def semantic_chunk_text(text: str, max_chunk_size: int = MAX_CHUNK_SIZE, overlap
                 current_chunk = sentence
                 current_length = sentence_length
 
-    # Add final chunk if it's unique
+    # Add final chunk
     if current_chunk:
-        chunk_candidate = current_chunk.strip()
-        if chunk_candidate and chunk_candidate not in chunk_texts_seen:
-            chunks.append(chunk_candidate)
+        chunks.append(current_chunk.strip())
 
-    # Final deduplication - remove duplicate chunks across all chunks
-    unique_chunks = []
-    seen_chunks = set()
-    for chunk in chunks:
-        if chunk not in seen_chunks and len(chunk.strip()) > 20:  # Minimum chunk length
-            unique_chunks.append(chunk)
-            seen_chunks.add(chunk)
-
-    # Ensure we have at least one chunk if original text was meaningful
-    return unique_chunks if unique_chunks else ([text[:max_chunk_size]] if text.strip() else [])
+    # Ensure we have at least one chunk
+    return chunks if chunks else [text]
 
 
 
