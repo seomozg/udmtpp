@@ -175,8 +175,8 @@ class TestRAGSystem:
         rag = RAGSystem()
 
         results = [
-            {"text": "test text 1", "url": "test1.com"},
-            {"text": "test text 2", "url": "test2.com"}
+            {"payload": {"text": "test text 1", "url": "test1.com"}, "score": 0.8},
+            {"payload": {"text": "test text 2", "url": "test2.com"}, "score": 0.9}
         ]
 
         context = rag._prepare_context(results)
@@ -192,8 +192,8 @@ class TestRAGSystem:
         rag = RAGSystem()
 
         results = [
-            {"url": "test1.com", "score": 0.8, "category": "test"},
-            {"url": "test2.com", "score": 0.9, "category": "test"}
+            {"payload": {"url": "test1.com", "category": "test"}, "score": 0.8},
+            {"payload": {"url": "test2.com", "category": "test"}, "score": 0.9}
         ]
 
         sources = rag._extract_sources(results)
