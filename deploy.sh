@@ -11,7 +11,16 @@ echo "Starting deployment..."
 # Check if python3-venv is available
 if ! python3 -m venv --help > /dev/null 2>&1; then
     echo "Installing python3-venv..."
-    apt update && apt install -y python3-venv python3-full
+    apt update
+
+    # Try to install python3-venv, if fails try python3.12-venv (for specific Python versions)
+    if ! apt install -y python3-venv; then
+        echo "Trying python3.12-venv..."
+        apt install -y python3.12-venv
+    fi
+
+    # Also install python3-full as backup
+    apt install -y python3-full
 fi
 
 # Create virtual environment if it doesn't exist
