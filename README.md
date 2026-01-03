@@ -313,6 +313,103 @@ data: [DONE]
 
 ---
 
+## 🚀 Деплой на сервер
+
+### Решение проблемы "externally-managed-environment"
+
+При деплое на Linux серверах (Ubuntu/Debian) может возникнуть ошибка:
+```
+× This environment is externally managed
+╰─> To install Python packages system-wide, try apt install python3-xyz...
+```
+
+**Решение:** Используйте виртуальное окружение Python.
+
+### Автоматический деплой
+
+1. **Скопируйте проект на сервер:**
+```bash
+git clone https://github.com/seomozg/udmtpp.git
+cd udmtpp
+```
+
+2. **Запустите скрипт деплоя:**
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+Скрипт автоматически:
+- ✅ Установит `python3-venv` если нужно
+- ✅ Создаст виртуальное окружение `venv/`
+- ✅ Активирует виртуальное окружение
+- ✅ Установит все зависимости из `requirements.txt`
+- ✅ Запустит приложение на порту 8001
+
+3. **Настройте переменные окружения:**
+```bash
+# В файле .env
+DEEPSEEK_API_KEY=ваш_api_ключ
+# Другие переменные по необходимости
+```
+
+4. **Для продакшена (без --reload):**
+```bash
+# Измените в deploy.sh последнюю строку:
+python -m uvicorn src.app:app --host 0.0.0.0 --port 8001
+```
+
+### Ручной деплой
+
+Если предпочитаете ручной процесс:
+
+```bash
+# 1. Установите python3-venv
+sudo apt update && sudo apt install -y python3-venv python3-full
+
+# 2. Создайте виртуальное окружение
+python3 -m venv venv
+
+# 3. Активируйте
+source venv/bin/activate
+
+# 4. Установите зависимости
+pip install -r requirements.txt
+
+# 5. Запустите приложение
+python -m uvicorn src.app:app --host 0.0.0.0 --port 8001
+```
+
+### Systemd сервис (для продакшена)
+
+Создайте файл `/etc/systemd/system/udmtpp.service`:
+
+```ini
+[Unit]
+Description=UdmTPP RAG AI-Chat Assistant
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/test-domain.ru/html/udmtpp
+ExecStart=/var/www/test-domain.ru/html/udmtpp/venv/bin/python -m uvicorn src.app:app --host 0.0.0.0 --port 8001
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Затем:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable udmtpp
+sudo systemctl start udmtpp
+```
+
+---
+
 ## 📄 Лицензия
 
 **MIT** — свободное использование для образовательных и коммерческих целей.
